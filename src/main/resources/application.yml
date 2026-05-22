@@ -1,13 +1,15 @@
 management:
   endpoints:
     web:
-      base-path: "/"
-      path-mapping:
-        prometheus: metrics
+      base-path: "/actuator"
       exposure:
-        include: health
+        include: health, metrics
   endpoint:
-    metrics:
-      enabled: true
     prometheus:
       enabled: false
+    metrics:
+      enabled: true
+    health:
+      enabled: true
+
+kind: Application
