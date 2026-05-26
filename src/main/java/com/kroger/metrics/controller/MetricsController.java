@@ -2,7 +2,10 @@ package com.kroger.metrics.controller;
 
 import com.kroger.metrics.constants.MetricsConstants;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -15,6 +18,7 @@ import java.util.stream.Collectors;
  * Exposes Prometheus metrics at /metrics endpoint
  * with custom transformations like renaming, type and timestamp tags.
  */
+@Slf4j
 @RestController
 public class MetricsController
 {
@@ -33,20 +37,36 @@ public class MetricsController
      * adds type and timestamp tags to every line.
      */
     @GetMapping(value = "/metrics", produces = MediaType.TEXT_PLAIN_VALUE)
-    public String metrics()
+    public ResponseEntity<String> metrics()
     {
-        String timestamp = Instant.now().toString();
+        try
+        {
+            return ResponseEntity.ok(generateMetrics());
+        }
+        catch (Exception e)
+        {
+            log.error(MetricsConstants.LOG_METRICS_CONTROLLER_ERROR, e.getMessage());
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(MetricsConstants.ERROR_GENERATING_METRICS_BODY);
+        }
+    }
 
+    /**
+     * Generates the metrics string by processing each scraped line.
+     */
+    private String generateMetrics()
+    {
         return Arrays.stream(registry.scrape().split("\n"))
                 .filter(this::isValidLine)
                 .map(this::renameMetric)
                 .map(this::renameTagValues)
-                .map(line -> enrichWithTypeAndTimestamp(line, timestamp))
+                .map(line -> enrichWithTypeAndTimestamp(line, Instant.now().toString()))
                 .collect(Collectors.joining("\n"));
     }
 
     /**
-     * Filters out comment lines and blank lines(#).
+     * Filters out comment lines and blank lines.
      */
     private boolean isValidLine(String line)
     {
@@ -60,13 +80,12 @@ public class MetricsController
     private String renameMetric(String line)
     {
         int endIndex = findMetricNameEnd(line);
-        if (endIndex == -1) return line;
+        if (endIndex == -1)
+            return line;
 
         String metricName = line.substring(0, endIndex);
-        String renamed    = MetricsConstants.METRIC_NAME_RENAMES
-                .getOrDefault(metricName, metricName);
 
-        return renamed + line.substring(endIndex);
+        return MetricsConstants.METRIC_NAME_RENAMES.getOrDefault(metricName, metricName) + line.substring(endIndex);
     }
 
     /**
@@ -87,8 +106,7 @@ public class MetricsController
      */
     private String enrichWithTypeAndTimestamp(String line, String timestamp)
     {
-        String type = resolveType(line);
-        String extraTags = buildExtraTags(type, timestamp);
+        String extraTags = buildExtraTags(resolveType(line), timestamp);
 
         return line.contains("{") ? injectIntoExistingTags(line, extraTags) : appendNewTagBlock(line, extraTags);
     }
@@ -130,7 +148,6 @@ public class MetricsController
 
     /**
      * Injects extra tags into existing tag block before closing brace.
-     * Example: metric{a="1"} 1.0 becomes metric{a="1",type="x",timestamp="y"} 1.0
      */
     private String injectIntoExistingTags(String line, String extraTags)
     {
@@ -140,16 +157,13 @@ public class MetricsController
 
     /**
      * Appends new tag block to a metric line that has no tags.
-     * Example: metric 1.0 becomes metric{type="x",timestamp="y"} 1.0
      */
     private String appendNewTagBlock(String line, String extraTags)
     {
-        int spaceIndex = line.lastIndexOf(" ");
-        String metricName = line.substring(0, spaceIndex);
-        String value = line.substring(spaceIndex);
-        String tags = extraTags.startsWith(",") ? extraTags.substring(1) : extraTags;
+        int spaceIndex    = line.lastIndexOf(" ");
+        String tags       = extraTags.startsWith(",") ? extraTags.substring(1) : extraTags;
 
-        return metricName + "{" + tags + "}" + value;
+        return line.substring(0, spaceIndex) + "{" + tags + "}" + line.substring(spaceIndex);
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.kroger.metrics.service;
 
+import com.kroger.metrics.constants.MetricsConstants;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Timer;
@@ -11,110 +12,111 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-@Service
+/**
+ * Service for programmatic metric tracking.
+ * Use this when you need conditional tracking or business logic based metrics.
+ * All operations are safe and will not break user code if metric recording fails.
+ */
 @Slf4j
+@Service
 public class MetricService
 {
     private final MeterRegistry meterRegistry;
 
-    /**
-     * Constructs a MetricService with the provided MeterRegistry.
-     * @param meterRegistry the MeterRegistry to use for metrics
-     */
     public MetricService(@Lazy MeterRegistry meterRegistry)
     {
         this.meterRegistry = meterRegistry;
     }
 
     /**
-     * Increments a counter metric with the given name and standard tags.
-     * @param metricName the name of the metric
+     * Increments a counter metric with standard tags only.
      */
     public void count(String metricName)
     {
-        meterRegistry.counter(metricName + "_total", baseTags()).increment();
+        safelyRecord(() -> meterRegistry.counter(metricName + MetricsConstants.TOTAL_SUFFIX, baseTags()).increment(), metricName);
     }
 
     /**
-     * Increments a counter metric with the given name and custom tags.
-     * @param metricName the name of the metric
-     * @param tags key-value pairs for tags (even number of elements)
+     * Increments a counter metric with custom tags.
      */
     public void count(String metricName, String... tags)
     {
-        meterRegistry.counter(metricName + "_total", buildTags(tags)).increment();
+        safelyRecord(() -> meterRegistry.counter(metricName + MetricsConstants.TOTAL_SUFFIX, buildTags(tags)).increment(), metricName);
     }
 
     /**
-     * Increments a counter metric if the condition is true.
-     * @param condition the condition to check
-     * @param metricName the name of the metric
-     * @param tags key-value pairs for tags (even number of elements)
+     * Increments a counter only if condition is true.
      */
     public void countIf(boolean condition, String metricName, String... tags)
     {
-        if (condition) 
+        if (condition) count(metricName, tags);
+    }
+
+    /**
+     * Tracks an exception with exception details as tags.
+     */
+    public void trackException(String metricName, Throwable throwable, String... tags)
+    {
+        safelyRecord(() -> meterRegistry.counter(metricName + MetricsConstants.TOTAL_SUFFIX, buildExceptionTags(throwable, false, tags)).increment(), metricName);
+    }
+
+    /**
+     * Tracks a critical exception and logs as ERROR.
+     */
+    public void trackCritical(String metricName, Throwable throwable, String... tags)
+    {
+        safelyRecord(() ->
         {
-            meterRegistry.counter(metricName + "_total", buildTags(tags)).increment();
+            meterRegistry.counter(metricName + MetricsConstants.TOTAL_SUFFIX, buildExceptionTags(throwable, true, tags)).increment();
+            log.error(MetricsConstants.LOG_CRITICAL_EXCEPTION, metricName, throwable.getMessage());
+        }, metricName);
+    }
+
+    /**
+     * Tracks an error log with custom message.
+     */
+    public void trackError(String metricName, String message, String... tags)
+    {
+        safelyRecord(() ->
+        {
+            List<Tag> allTags = buildTags(tags);
+            allTags.add(Tag.of(MetricsConstants.TAG_MESSAGE, message != null ? message : MetricsConstants.NO_MESSAGE));
+            allTags.add(Tag.of(MetricsConstants.TAG_STATUS, MetricsConstants.STATUS_ERROR));
+            meterRegistry.counter(metricName + MetricsConstants.TOTAL_SUFFIX, allTags).increment();
+        }, metricName);
+    }
+
+    /**
+     * Records duration of an operation in milliseconds.
+     */
+    public void recordTime(String metricName, long durationMs, String... tags)
+    {
+        safelyRecord(() ->
+                        Timer.builder(metricName + MetricsConstants.SUFFIX_TIMER)
+                                .tags(buildTags(tags))
+                                .register(meterRegistry)
+                                .record(durationMs, TimeUnit.MILLISECONDS),
+                metricName);
+    }
+
+    /**
+     * Safely executes metric recording. Catches all exceptions to prevent
+     * library failures from breaking user code.
+     */
+    private void safelyRecord(Runnable action, String metricName)
+    {
+        try
+        {
+            action.run();
+        }
+        catch (Exception e)
+        {
+            log.warn(MetricsConstants.LOG_FAILED_RECORD_METRIC, metricName, e.getMessage());
         }
     }
 
     /**
-     * Tracks an exception by incrementing a counter with exception details as tags.
-     * @param metricName the name of the metric
-     * @param throwable the exception to track
-     * @param tags key-value pairs for tags (even number of elements)
-     */
-    public void trackException(String metricName, Throwable throwable, String... tags)
-    {
-        List<Tag> allTags = buildExceptionTags(throwable, false, tags);
-        meterRegistry.counter(metricName + "_total", allTags).increment();
-    }
-
-    /**
-     * Tracks a critical exception by incrementing a counter and logging the error.
-     * @param metricName the name of the metric
-     * @param throwable the critical exception to track
-     * @param tags key-value pairs for tags (even number of elements)
-     */
-    public void trackCritical(String metricName, Throwable throwable, String... tags)
-    {
-        List<Tag> allTags = buildExceptionTags(throwable, true, tags);
-        meterRegistry.counter(metricName + "_total", allTags).increment();
-        log.error("CRITICAL [{}]: {}", metricName, throwable.getMessage());
-    }
-
-    /**
-     * Tracks an error by incrementing a counter with an error message and status tag.
-     * @param metricName the name of the metric
-     * @param message the error message
-     * @param tags key-value pairs for tags (even number of elements)
-     */
-    public void trackError(String metricName, String message, String... tags)
-    {
-        List<Tag> allTags = buildTags(tags);
-        allTags.add(Tag.of("message", message != null ? message : "no_message"));
-        allTags.add(Tag.of("status", "error"));
-        meterRegistry.counter(metricName + "_total", allTags).increment();
-    }
-
-    /**
-     * Records the duration of an event in milliseconds as a timer metric.
-     * @param metricName the name of the metric
-     * @param durationMs the duration in milliseconds
-     * @param tags key-value pairs for tags (even number of elements)
-     */
-    public void recordTime(String metricName, long durationMs, String... tags)
-    {
-        Timer.builder(metricName + "_duration_seconds")
-                .tags(buildTags(tags))
-                .register(meterRegistry)
-                .record(durationMs, TimeUnit.MILLISECONDS);
-    }
-
-    /**
-     * Builds a list of standard tags for metrics (class and method).
-     * @return list of standard tags
+     * Builds base tags with class and method from stack trace.
      */
     private List<Tag> baseTags()
     {
@@ -124,74 +126,69 @@ public class MetricService
     }
 
     /**
-     * Builds a list of tags from the provided key-value pairs and adds standard tags.
-     * @param tags key-value pairs for tags (even number of elements)
-     * @return list of tags
+     * Builds tags from key-value pairs and adds standard tags.
      */
     private List<Tag> buildTags(String... tags)
     {
         List<Tag> tagList = new ArrayList<>();
-        if (tags != null && tags.length > 0)
-        {
-            for (int i = 0; i < tags.length - 1; i += 2)
-                tagList.add(Tag.of(tags[i], tags[i + 1]));
-        }
+        addKeyValuePairs(tagList, tags);
         addStandardTags(tagList);
         return tagList;
     }
 
     /**
-     * Builds a list of tags for exceptions, including exception details and critical flag.
-     * @param throwable the exception
-     * @param critical whether the exception is critical
-     * @param tags key-value pairs for tags (even number of elements)
-     * @return list of tags
+     * Builds exception tags with exception details.
      */
     private List<Tag> buildExceptionTags(Throwable throwable, boolean critical, String... tags)
     {
         List<Tag> tagList = new ArrayList<>();
+        addKeyValuePairs(tagList, tags);
 
-        if (tags != null && tags.length > 0)
-        {
-            for (int i = 0; i < tags.length - 1; i += 2)
-                tagList.add(Tag.of(tags[i], tags[i + 1]));
-        }
-
-        tagList.add(Tag.of("exception", throwable.getClass().getSimpleName()));
-        tagList.add(Tag.of("message",   throwable.getMessage() != null ? throwable.getMessage() : "no_message"));
-        tagList.add(Tag.of("status",   "failure"));
-        tagList.add(Tag.of("critical", String.valueOf(critical)));
+        tagList.add(Tag.of(MetricsConstants.TAG_EXCEPTION, throwable.getClass().getSimpleName()));
+        tagList.add(Tag.of(MetricsConstants.TAG_MESSAGE,   throwable.getMessage() != null ? throwable.getMessage() : MetricsConstants.NO_MESSAGE));
+        tagList.add(Tag.of(MetricsConstants.TAG_STATUS,   MetricsConstants.STATUS_FAILURE));
+        tagList.add(Tag.of(MetricsConstants.TAG_CRITICAL, String.valueOf(critical)));
 
         addStandardTags(tagList);
         return tagList;
     }
 
     /**
-     * Adds standard tags (class and method) to the provided tag list.
-     * @param tags the tag list to add to
+     * Adds key-value pairs from String varargs to tag list.
      */
-    private void addStandardTags(List<Tag> tags)
+    private void addKeyValuePairs(List<Tag> tagList, String... tags)
     {
-        StackTraceElement caller = findCaller();
-        if (caller != null)
-        {
-            String fullClassName = caller.getClassName();
-            String className     = fullClassName.substring(fullClassName.lastIndexOf('.') + 1);
+        if (tags == null || tags.length == 0)
+            return;
 
-            tags.add(Tag.of("class",  className));
-            tags.add(Tag.of("method", caller.getMethodName()));
+        for (int i = 0; i < tags.length - 1; i += 2)
+        {
+            tagList.add(Tag.of(tags[i], tags[i + 1]));
         }
     }
 
     /**
-     * Finds the caller's stack trace element outside of standard Java and this class.
-     * @return the caller's StackTraceElement, or null if not found
+     * Adds class and method tags by inspecting the stack trace.
+     */
+    private void addStandardTags(List<Tag> tags)
+    {
+        StackTraceElement caller = findCaller();
+        if (caller == null)
+            return;
+
+        String fullClassName = caller.getClassName();
+        String className     = fullClassName.substring(fullClassName.lastIndexOf('.') + 1);
+
+        tags.add(Tag.of(MetricsConstants.TAG_CLASS,  className));
+        tags.add(Tag.of(MetricsConstants.TAG_METHOD, caller.getMethodName()));
+    }
+
+    /**
+     * Finds the actual caller class by skipping framework and library frames.
      */
     private StackTraceElement findCaller()
     {
-        StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
-
-        for (StackTraceElement element : stackTrace)
+        for (StackTraceElement element : Thread.currentThread().getStackTrace())
         {
             String className = element.getClassName();
 

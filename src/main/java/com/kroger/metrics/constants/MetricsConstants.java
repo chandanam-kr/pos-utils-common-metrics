@@ -1,6 +1,7 @@
 package com.kroger.metrics.constants;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class MetricsConstants
@@ -72,4 +73,50 @@ public class MetricsConstants
         put("new",                    "not_yet_started");
         put("terminated",             "finished_execution");
     }};
+    
+    public static final List<String> DEFAULT_ALLOWED = List.of(
+            "jvm.memory",
+            "jvm.threads",
+            "http.server",
+            "process.cpu",
+            "system.cpu",
+            "logback"
+    );
+
+    // Log messages
+    public static final String LOG_METRICS_FILTER_INIT       = "Metrics filter initialized with defaults {} and additional prefixes {}";
+    public static final String LOG_METER_FILTER_ERROR        = "MeterFilter error for [{}]: {}";
+    public static final String LOG_METRICS_CONTROLLER_ERROR  = "Failed to generate metrics: {}";
+    public static final String ERROR_GENERATING_METRICS_BODY = "# Error generating metrics\n";
+    public static final String METRIC_RECORDING_FAILED_LOG   = "Metric recording failed for [{}]: {}";
+    public static final String LOG_CRITICAL_EXCEPTION        = "CRITICAL [{}]: {}";
+    public static final String LOG_EXCEPTION                 = "Exception [{}]: {}";
+    public static final String METRIC_TRACKING_FAILED        = "Exception metric tracking failed: {}";
+    
+    
+    // Tag keys
+    public static final String TAG_CLASS        = "class";
+    public static final String TAG_METHOD       = "method";
+    public static final String TAG_STATUS       = "status";
+    // Tag values
+    public static final String STATUS_SUCCESS   = "success";
+    public static final String STATUS_FAILURE   = "failure";
+    public static final String STATUS_ERROR     = "error";
+    public static final String UNRESOLVED       = "unresolved";
+    public static final String NULL_VALUE       = "null";
+    public static final String GET              = "get";
+    public static final String TAG_EXCEPTION    = "exception";
+    public static final String TAG_MESSAGE      = "message";
+    public static final String TAG_CRITICAL     = "critical";
+    // Metric suffixes
+    public static final String SUFFIX_COUNTER   = "_total";
+    public static final String SUFFIX_TIMER     = "_duration_seconds";
+    public static final String FAILURE_SUFFIX   = "_failure";
+    public static final String TOTAL_SUFFIX     = "_total";
+    public static final String NO_MESSAGE       = "no_message";
+    // Tag parsing symbols
+    public static final String TAG_SEPARATOR        = "=";
+    public static final String TAG_DYNAMIC_PREFIX   = "#";
+    public static final String TAG_NESTED_SEPARATOR = ".";
+    public static final String LOG_FAILED_RECORD_METRIC = "Failed to record metric [{}]: {}";
 }

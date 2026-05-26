@@ -2,6 +2,7 @@ package com.kroger.metrics.aspect;
 
 import com.kroger.metrics.annotation.OnException;
 import com.kroger.metrics.annotation.Track;
+import com.kroger.metrics.constants.MetricsConstants;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
 import lombok.extern.slf4j.Slf4j;
@@ -18,118 +19,117 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
+import static com.kroger.metrics.constants.MetricsConstants.*;
+
+/**
+ * Tracks exceptions for methods annotated with @OnException.
+ * Never breaks user code - metric failures are caught and logged.
+ */
+@Slf4j
 @Aspect
 @Component
-@Slf4j
 public class OnExceptionAspect
 {
     private final MeterRegistry meterRegistry;
     private final MetricAspect  metricAspect;
 
-    public OnExceptionAspect(@Lazy MeterRegistry meterRegistry,
-                             MetricAspect metricAspect)
+    public OnExceptionAspect(@Lazy MeterRegistry meterRegistry, MetricAspect metricAspect)
     {
         this.meterRegistry = meterRegistry;
         this.metricAspect  = metricAspect;
     }
 
     @Around("@annotation(onException)")
-    public Object capture(ProceedingJoinPoint joinPoint,
-                          OnException onException) throws Throwable
+    public Object capture(ProceedingJoinPoint joinPoint, OnException onException) throws Throwable
     {
-        String className       = joinPoint.getTarget().getClass().getSimpleName();
-        String methodName      = joinPoint.getSignature().getName();
-        Object[] args          = joinPoint.getArgs();
-        Parameter[] parameters = ((MethodSignature) joinPoint.getSignature())
-                .getMethod().getParameters();
-
-        List<Tag> baseTags = metricAspect.buildTags(
-                onException.tags(), className, methodName, parameters, args);
-
         try
         {
             return joinPoint.proceed();
         }
         catch (Throwable throwable)
         {
-            handleException(throwable, onException, baseTags, className, methodName);
+            recordSafely(joinPoint, onException, throwable);
             throw throwable;
         }
     }
 
-    private void handleException(Throwable throwable, OnException onException,
-                                 List<Tag> baseTags, String className, String methodName)
+    private void recordSafely(ProceedingJoinPoint joinPoint, OnException onException, Throwable throwable)
     {
-        boolean ignored = Arrays.stream(onException.ignore())
-                .anyMatch(ex -> ex.isInstance(throwable));
-
-        if (ignored)
+        try
         {
-            log.debug("Ignoring [{}] for class [{}] method [{}]",
-                    throwable.getClass().getSimpleName(), className, methodName);
-            return;
-        }
+            if (isIgnored(throwable, onException.ignore())) return;
 
-        if (onException.track().length > 0)
-            handleTrackedException(throwable, onException, baseTags, className, methodName);
-        else
-            handleDefaultException(throwable, onException, baseTags, className, methodName);
+            List<Tag> baseTags = buildBaseTags(joinPoint, onException);
+
+            findTrackMatch(throwable, onException.track())
+                    .ifPresentOrElse(
+                            track -> recordTracked(track, baseTags, throwable),
+                            () -> recordDefault(onException, baseTags, throwable));
+        }
+        catch (Exception e)
+        {
+            log.warn(METRIC_TRACKING_FAILED, e.getMessage());
+        }
     }
 
-    private void handleTrackedException(Throwable throwable, OnException onException,
-                                        List<Tag> baseTags, String className, String methodName)
+    private boolean isIgnored(Throwable throwable, Class<? extends Throwable>[] ignoreList)
     {
-        Optional<Track> matched = Arrays.stream(onException.track())
+        return Arrays.stream(ignoreList).anyMatch(ex -> ex.isInstance(throwable));
+    }
+
+    private Optional<Track> findTrackMatch(Throwable throwable, Track[] tracks)
+    {
+        return Arrays.stream(tracks)
                 .filter(t -> t.type().isInstance(throwable))
                 .findFirst();
-
-        if (matched.isEmpty())
-        {
-            log.debug("Exception [{}] not in track list for class [{}] method [{}]",
-                    throwable.getClass().getSimpleName(), className, methodName);
-            return;
-        }
-
-        Track track    = matched.get();
-        List<Tag> tags = buildFailureTags(baseTags, throwable, track.critical());
-
-        meterRegistry.counter(track.metric() + "_total", tags).increment();
-
-        if (track.critical())
-            log.error("CRITICAL [{}] class [{}] method [{}]: {}",
-                    track.metric(), className, methodName, throwable.getMessage());
-        else
-            log.warn("Exception [{}] class [{}] method [{}]: {}",
-                    track.metric(), className, methodName, throwable.getMessage());
     }
 
-    private void handleDefaultException(Throwable throwable, OnException onException,
-                                        List<Tag> baseTags, String className, String methodName)
+    private void recordTracked(Track track, List<Tag> baseTags, Throwable throwable)
     {
-        if (onException.on().isEmpty())
-        {
-            log.warn("No 'on' defined for default tracking class [{}] method [{}]",
-                    className, methodName);
-            return;
-        }
+        List<Tag> tags = buildFailureTags(baseTags, throwable, track.critical());
+        meterRegistry.counter(track.metric() + TOTAL_SUFFIX, tags).increment();
+        logException(track.metric(), throwable, track.critical());
+    }
 
-        String metricName = onException.on() + "_failure";
+    private void recordDefault(OnException onException, List<Tag> baseTags, Throwable throwable)
+    {
+        if (onException.on().isEmpty()) return;
+
+        String metricName = onException.on() + FAILURE_SUFFIX;
         List<Tag> tags    = buildFailureTags(baseTags, throwable, false);
 
-        meterRegistry.counter(metricName + "_total", tags).increment();
+        meterRegistry.counter(metricName + TOTAL_SUFFIX, tags).increment();
+        logException(metricName, throwable, false);
+    }
 
-        log.warn("Default exception [{}] class [{}] method [{}]: {}",
-                metricName, className, methodName, throwable.getMessage());
+    private void logException(String metricName, Throwable throwable, boolean critical)
+    {
+        if (critical)
+            log.error(LOG_CRITICAL_EXCEPTION, metricName, throwable.getMessage());
+        else
+            log.warn(LOG_EXCEPTION, metricName, throwable.getMessage());
+    }
+
+    private List<Tag> buildBaseTags(ProceedingJoinPoint joinPoint, OnException onException)
+    {
+        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+        String className          = joinPoint.getTarget().getClass().getSimpleName();
+        String methodName         = signature.getName();
+        Object[] args             = joinPoint.getArgs();
+        Parameter[] parameters    = signature.getMethod().getParameters();
+
+        return metricAspect.buildTags(onException.tags(),
+                className, methodName, parameters, args);
     }
 
     private List<Tag> buildFailureTags(List<Tag> baseTags, Throwable throwable, boolean critical)
     {
         List<Tag> tags = new ArrayList<>(baseTags);
-        tags.add(Tag.of("status",    "failure"));
-        tags.add(Tag.of("exception", throwable.getClass().getSimpleName()));
-        tags.add(Tag.of("message",   throwable.getMessage() != null
-                ? throwable.getMessage() : "no_message"));
-        tags.add(Tag.of("critical",  String.valueOf(critical)));
+        tags.add(Tag.of(MetricsConstants.TAG_STATUS, MetricsConstants.STATUS_FAILURE));
+        tags.add(Tag.of(MetricsConstants.TAG_EXCEPTION, throwable.getClass().getSimpleName()));
+        tags.add(Tag.of(MetricsConstants.TAG_MESSAGE, throwable.getMessage() != null
+                ? throwable.getMessage() : MetricsConstants.NO_MESSAGE));
+        tags.add(Tag.of(MetricsConstants.TAG_CRITICAL, String.valueOf(critical)));
         return tags;
     }
 }

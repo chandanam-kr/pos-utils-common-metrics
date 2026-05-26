@@ -1,7 +1,7 @@
 package com.kroger.metrics.aspect;
 
 import com.kroger.metrics.annotation.Metric;
-import com.kroger.metrics.annotation.MetricType;
+import com.kroger.metrics.constants.MetricsConstants;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Timer;
@@ -17,11 +17,19 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import static com.kroger.metrics.constants.MetricsConstants.GET;
+import static com.kroger.metrics.constants.MetricsConstants.METRIC_RECORDING_FAILED_LOG;
+
+/**
+ * Records success metrics for methods annotated with @Metric.
+ * Failures are caught silently to never break user code.
+ */
+@Slf4j
 @Aspect
 @Component
-@Slf4j
 public class MetricAspect
 {
     private final MeterRegistry meterRegistry;
@@ -34,47 +42,38 @@ public class MetricAspect
     @Around("@annotation(metric)")
     public Object capture(ProceedingJoinPoint joinPoint, Metric metric) throws Throwable
     {
-        String className       = joinPoint.getTarget().getClass().getSimpleName();
-        String methodName      = joinPoint.getSignature().getName();
-        Object[] args          = joinPoint.getArgs();
-        Parameter[] parameters = ((MethodSignature) joinPoint.getSignature())
-                .getMethod().getParameters();
+        long startTime = System.currentTimeMillis();
 
-        log.info(">>> Metric triggered for [{}]", metric.on());
+        recordSafely(joinPoint, metric, startTime);
+        return joinPoint.proceed();
+    }
 
-        List<Tag> baseTags = buildTags(metric.tags(), className, methodName, parameters, args);
-        long startTime     = System.currentTimeMillis();
-
+    private void recordSafely(ProceedingJoinPoint joinPoint, Metric metric, long startTime)
+    {
         try
         {
-            Object result     = joinPoint.proceed();
-            List<Tag> success = new ArrayList<>(baseTags);
-            success.add(Tag.of("status", "success"));
+            List<Tag> tags = buildTags(joinPoint, metric);
+            tags.add(Tag.of(MetricsConstants.TAG_STATUS, MetricsConstants.STATUS_SUCCESS));
 
-            record(metric.type(), metric.on(), success, startTime);
-
-            return result;
+            record(metric, tags, startTime);
         }
-        catch (Throwable throwable)
+        catch (Exception e)
         {
-            throw throwable;
+            log.warn(METRIC_RECORDING_FAILED_LOG, metric.on(), e.getMessage());
         }
     }
 
-    private void record(MetricType type, String eventName, List<Tag> tags, long startTime)
+    private void record(Metric metric, List<Tag> tags, long startTime)
     {
-        switch (type)
+        switch (metric.type())
         {
-            case COUNTER -> counter(eventName + "_total", tags);
-
-            case TIMER   -> timer(eventName + "_duration_seconds", tags, startTime);
-
-            case GAUGE   -> gauge(eventName, tags, startTime);
-
+            case COUNTER -> counter(metric.on() + MetricsConstants.SUFFIX_COUNTER, tags);
+            case TIMER   -> timer(metric.on() + MetricsConstants.SUFFIX_TIMER, tags, startTime);
+            case GAUGE   -> gauge(metric.on(), tags, startTime);
             case ALL     ->
             {
-                counter(eventName + "_total", tags);
-                timer(eventName + "_duration_seconds", tags, startTime);
+                counter(metric.on() + MetricsConstants.SUFFIX_COUNTER, tags);
+                timer(metric.on() + MetricsConstants.SUFFIX_TIMER, tags, startTime);
             }
         }
     }
@@ -97,32 +96,52 @@ public class MetricAspect
         meterRegistry.gauge(name, tags, System.currentTimeMillis() - startTime);
     }
 
+    /**
+     * Builds tags from method context and annotation.
+     * Shared with OnExceptionAspect via public method.
+     */
+    public List<Tag> buildTags(ProceedingJoinPoint joinPoint, Metric metric)
+    {
+        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+        String methodName         = signature.getName();
+        Parameter[] parameters    = signature.getMethod().getParameters();
+
+        return buildTags(metric.tags(), joinPoint.getTarget().getClass().getSimpleName(),
+                methodName, parameters, joinPoint.getArgs());
+    }
+
     public List<Tag> buildTags(String[] annotationTags, String className,
                                String methodName, Parameter[] parameters, Object[] args)
     {
         List<Tag> tags = new ArrayList<>();
-        tags.add(Tag.of("class",  className));
-        tags.add(Tag.of("method", methodName));
+        tags.add(Tag.of(MetricsConstants.TAG_CLASS, className));
+        tags.add(Tag.of(MetricsConstants.TAG_METHOD, methodName));
 
         for (String tag : annotationTags)
-        {
-            String[] kv = tag.split("=", 2);
-            if (kv.length != 2) continue;
-
-            String key   = kv[0].trim();
-            String value = kv[1].trim();
-
-            tags.add(Tag.of(key, value.startsWith("#")
-                    ? resolve(value.substring(1), parameters, args)
-                    : value));
-        }
+            parseTag(tag, parameters, args).ifPresent(tags::add);
 
         return tags;
     }
 
-    public String resolve(String expression, Parameter[] parameters, Object[] args)
+    private java.util.Optional<Tag> parseTag(String tag, Parameter[] parameters, Object[] args)
     {
-        return expression.contains(".")
+        String[] kv = tag.split(MetricsConstants.TAG_SEPARATOR, 2);
+        if (kv.length != 2)
+            return Optional.empty();
+
+        String key   = kv[0].trim();
+        String value = kv[1].trim();
+
+        String resolved = value.startsWith(MetricsConstants.TAG_DYNAMIC_PREFIX)
+                ? resolve(value.substring(1), parameters, args)
+                : value;
+
+        return Optional.of(Tag.of(key, resolved));
+    }
+
+    private String resolve(String expression, Parameter[] parameters, Object[] args)
+    {
+        return expression.contains(MetricsConstants.TAG_NESTED_SEPARATOR)
                 ? resolveNested(expression, parameters, args)
                 : resolveSimple(expression, parameters, args);
     }
@@ -132,44 +151,53 @@ public class MetricAspect
         for (int i = 0; i < parameters.length; i++)
         {
             if (parameters[i].getName().equals(paramName))
-                return args[i] != null ? args[i].toString() : "null";
+                return args[i] != null ? args[i].toString() : MetricsConstants.NULL_VALUE;
         }
-        return "unresolved";
+        return MetricsConstants.UNRESOLVED;
     }
 
     private String resolveNested(String expression, Parameter[] parameters, Object[] args)
     {
+        String[] parts   = expression.split("\\.", 2);
+        String paramName = parts[0];
+        String fieldName = parts[1];
+
+        for (int i = 0; i < parameters.length; i++)
+        {
+            if (!parameters[i].getName().equals(paramName) || args[i] == null)
+                continue;
+
+            return extractField(args[i], fieldName);
+        }
+        return MetricsConstants.UNRESOLVED;
+    }
+
+    private String extractField(Object obj, String fieldName)
+    {
         try
         {
-            String[] parts   = expression.split("\\.", 2);
-            String paramName = parts[0];
-            String fieldName = parts[1];
-
-            for (int i = 0; i < parameters.length; i++)
-            {
-                if (!parameters[i].getName().equals(paramName) || args[i] == null)
-                    continue;
-
-                try
-                {
-                    String getter = "get" + Character.toUpperCase(fieldName.charAt(0))
-                            + fieldName.substring(1);
-                    Object value  = args[i].getClass().getMethod(getter).invoke(args[i]);
-                    return value != null ? value.toString() : "null";
-                }
-                catch (NoSuchMethodException e)
-                {
-                    Field field = args[i].getClass().getDeclaredField(fieldName);
-                    field.setAccessible(true);
-                    Object value = field.get(args[i]);
-                    return value != null ? value.toString() : "null";
-                }
-            }
+            Object value = tryGetter(obj, fieldName);
+            return value != null ? value.toString() : MetricsConstants.NULL_VALUE;
         }
         catch (Exception e)
         {
-            log.warn("Could not resolve [{}]: {}", expression, e.getMessage());
+            return MetricsConstants.UNRESOLVED;
         }
-        return "unresolved";
+    }
+
+    private Object tryGetter(Object obj, String fieldName) throws Exception
+    {
+        String getter = GET + Character.toUpperCase(fieldName.charAt(0)) + fieldName.substring(1);
+
+        try
+        {
+            return obj.getClass().getMethod(getter).invoke(obj);
+        }
+        catch (NoSuchMethodException e)
+        {
+            Field field = obj.getClass().getDeclaredField(fieldName);
+            field.setAccessible(true);
+            return field.get(obj);
+        }
     }
 }

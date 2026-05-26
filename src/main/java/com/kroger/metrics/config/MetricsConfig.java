@@ -1,8 +1,11 @@
 package com.kroger.metrics.config;
 
+import com.kroger.metrics.constants.MetricsConstants;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.config.MeterFilter;
 import io.micrometer.core.instrument.config.MeterFilterReply;
+import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -10,30 +13,20 @@ import org.springframework.context.annotation.Configuration;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.kroger.metrics.constants.MetricsConstants.DEFAULT_ALLOWED;
+
 /**
  * Configuration for Prometheus meter filtering.
  * Allows system metrics by default and lets user add business specific prefixes.
  */
+@Slf4j
 @Configuration
 @ConfigurationProperties(prefix = "metrics")
 public class MetricsConfig
 {
-    /**
-     * Library default prefixes for common system metrics.
-     * Always allowed regardless of user configuration.
-     */
-    private static final List<String> DEFAULT_ALLOWED = List.of(
-            "jvm.memory",
-            "jvm.threads",
-            "http.server",
-            "process.cpu",
-            "system.cpu",
-            "logback"
-    );
 
     /**
-     * User defined business metric prefixes.
-     * Configured via metrics.additional-prefixes in application.yml
+     * User defined business metric prefixes from application.yml.
      */
     private List<String> additionalPrefixes = new ArrayList<>();
 
@@ -44,12 +37,23 @@ public class MetricsConfig
 
     public void setAdditionalPrefixes(List<String> additionalPrefixes)
     {
-        this.additionalPrefixes = additionalPrefixes;
+        this.additionalPrefixes = additionalPrefixes != null
+                ? additionalPrefixes
+                : new ArrayList<>();
     }
 
     /**
-     * MeterFilter bean that allows metrics matching default or user defined prefixes.
-     * Denies all other metrics.
+     * Logs loaded configuration at startup for debugging.
+     */
+    @PostConstruct
+    public void logConfig()
+    {
+        log.info(MetricsConstants.LOG_METRICS_FILTER_INIT, DEFAULT_ALLOWED, additionalPrefixes);
+    }
+
+    /**
+     * Creates MeterFilter that allows metrics matching default or user prefixes.
+     * On any error defaults to NEUTRAL to avoid blocking metrics.
      */
     @Bean
     public MeterFilter meterFilter()
@@ -59,15 +63,28 @@ public class MetricsConfig
             @Override
             public MeterFilterReply accept(Meter.Id id)
             {
-                String name = id.getName();
-
-                boolean isAllowed = DEFAULT_ALLOWED.stream().anyMatch(name::startsWith)
-                        || additionalPrefixes.stream().anyMatch(name::startsWith);
-
-                return isAllowed
-                        ? MeterFilterReply.NEUTRAL
-                        : MeterFilterReply.DENY;
+                try
+                {
+                    return isAllowed(id.getName()) ? MeterFilterReply.NEUTRAL : MeterFilterReply.DENY;
+                }
+                catch (Exception e)
+                {
+                    log.warn(MetricsConstants.LOG_METER_FILTER_ERROR, id.getName(), e.getMessage());
+                    return MeterFilterReply.NEUTRAL;
+                }
             }
         };
+    }
+
+    /**
+     * Checks if metric name starts with any allowed prefix.
+     * Returns false for null or empty metric names.
+     */
+    private boolean isAllowed(String metricName)
+    {
+        if (metricName == null || metricName.isBlank()) return false;
+
+        return DEFAULT_ALLOWED.stream().anyMatch(metricName::startsWith)
+                || additionalPrefixes.stream().anyMatch(metricName::startsWith);
     }
 }
