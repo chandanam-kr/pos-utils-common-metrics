@@ -6,7 +6,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,7 +24,6 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
-@DisplayName("MetricService Tests")
 class MetricServiceTest
 {
     private MetricService metricService;
@@ -38,14 +36,10 @@ class MetricServiceTest
         metricService = new MetricService(meterRegistry);
     }
 
-    // ── Count Tests ────────────────────────────────────────────────
-
     @Nested
-    @DisplayName("Count Tests")
     class CountTests
     {
         @Test
-        @DisplayName("Should increment counter with no tags")
         void shouldIncrementCounterWithNoTags()
         {
             metricService.count("test.metric");
@@ -56,7 +50,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should increment counter multiple times")
         void shouldIncrementCounterMultipleTimes()
         {
             metricService.count("test.metric");
@@ -68,7 +61,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should increment counter with custom tags")
         void shouldIncrementCounterWithCustomTags()
         {
             metricService.count("test.metric", "storeId", "STORE-1");
@@ -81,7 +73,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should handle multiple custom tags")
         void shouldHandleMultipleCustomTags()
         {
             metricService.count("test.metric",
@@ -98,7 +89,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should add class and method tags automatically")
         void shouldAddClassAndMethodTagsAutomatically()
         {
             metricService.count("test.metric");
@@ -117,7 +107,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should handle odd number of tag arguments gracefully")
         void shouldHandleOddNumberOfTags()
         {
             assertDoesNotThrow(() ->
@@ -128,14 +117,10 @@ class MetricServiceTest
         }
     }
 
-    // ── CountIf Tests ──────────────────────────────────────────────
-
     @Nested
-    @DisplayName("CountIf Tests")
     class CountIfTests
     {
         @Test
-        @DisplayName("Should increment when condition is true")
         void shouldIncrementWhenConditionTrue()
         {
             metricService.countIf(true, "test.conditional");
@@ -146,7 +131,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should not increment when condition is false")
         void shouldNotIncrementWhenConditionFalse()
         {
             metricService.countIf(false, "test.conditional");
@@ -156,7 +140,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should pass tags when condition is true")
         void shouldPassTagsWhenConditionTrue()
         {
             metricService.countIf(true, "test.conditional",
@@ -169,14 +152,10 @@ class MetricServiceTest
         }
     }
 
-    // ── TrackException Tests ───────────────────────────────────────
-
     @Nested
-    @DisplayName("Track Exception Tests")
     class TrackExceptionTests
     {
         @Test
-        @DisplayName("Should track exception with exception details")
         void shouldTrackExceptionWithDetails()
         {
             RuntimeException ex = new RuntimeException("Test error");
@@ -194,7 +173,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should handle null exception message")
         void shouldHandleNullExceptionMessage()
         {
             RuntimeException ex = new RuntimeException();
@@ -208,7 +186,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should track different exception types separately")
         void shouldTrackDifferentExceptionTypesSeparately()
         {
             metricService.trackException("test.failure", new RuntimeException("Runtime"));
@@ -224,7 +201,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should include custom tags with exception")
         void shouldIncludeCustomTagsWithException()
         {
             metricService.trackException("test.failure",
@@ -239,14 +215,10 @@ class MetricServiceTest
         }
     }
 
-    // ── TrackCritical Tests ────────────────────────────────────────
-
     @Nested
-    @DisplayName("Track Critical Tests")
     class TrackCriticalTests
     {
         @Test
-        @DisplayName("Should track critical exception with critical flag")
         void shouldTrackCriticalWithFlag()
         {
             RuntimeException ex = new RuntimeException("Critical error");
@@ -261,7 +233,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should include exception details in critical")
         void shouldIncludeExceptionDetailsInCritical()
         {
             IOException ex = new IOException("Connection failed");
@@ -280,14 +251,10 @@ class MetricServiceTest
         }
     }
 
-    // ── TrackError Tests ───────────────────────────────────────────
-
     @Nested
-    @DisplayName("Track Error Tests")
     class TrackErrorTests
     {
         @Test
-        @DisplayName("Should track error with custom message")
         void shouldTrackErrorWithMessage()
         {
             metricService.trackError("test.error", "Something went wrong");
@@ -301,7 +268,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should handle null message gracefully")
         void shouldHandleNullMessage()
         {
             metricService.trackError("test.error", null);
@@ -313,7 +279,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should include custom tags with error")
         void shouldIncludeCustomTagsWithError()
         {
             metricService.trackError("test.error", "Failed validation",
@@ -328,14 +293,10 @@ class MetricServiceTest
         }
     }
 
-    // ── RecordTime Tests ───────────────────────────────────────────
-
     @Nested
-    @DisplayName("Record Time Tests")
     class RecordTimeTests
     {
         @Test
-        @DisplayName("Should record duration")
         void shouldRecordDuration()
         {
             metricService.recordTime("test.duration", 250);
@@ -347,7 +308,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should record multiple durations")
         void shouldRecordMultipleDurations()
         {
             metricService.recordTime("test.duration", 100);
@@ -360,7 +320,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should include custom tags with duration")
         void shouldIncludeCustomTagsWithDuration()
         {
             metricService.recordTime("test.duration", 150,
@@ -373,7 +332,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should handle zero duration")
         void shouldHandleZeroDuration()
         {
             metricService.recordTime("test.duration", 0);
@@ -384,14 +342,10 @@ class MetricServiceTest
         }
     }
 
-    // ── Safety Tests ───────────────────────────────────────────────
-
     @Nested
-    @DisplayName("Safety Tests")
     class SafetyTests
     {
         @Test
-        @DisplayName("Should not break when meter registry fails")
         void shouldNotBreakWhenRegistryFails()
         {
             MeterRegistry brokenRegistry = mock(MeterRegistry.class);
@@ -412,21 +366,18 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should handle null metric name gracefully")
         void shouldHandleNullMetricName()
         {
             assertDoesNotThrow(() -> metricService.count(null));
         }
 
         @Test
-        @DisplayName("Should handle null tags array")
         void shouldHandleNullTagsArray()
         {
             assertDoesNotThrow(() -> metricService.count("test.metric", (String[]) null));
         }
 
         @Test
-        @DisplayName("Should handle empty tags array")
         void shouldHandleEmptyTagsArray()
         {
             metricService.count("test.metric", new String[]{});
@@ -436,19 +387,14 @@ class MetricServiceTest
         }
     }
 
-    // ── Standard Tags Tests ────────────────────────────────────────
-
     @Nested
-    @DisplayName("Standard Tags Tests")
     class StandardTagsTests
     {
         @Test
-        @DisplayName("Should add class tag from caller")
         void shouldAddClassTagFromCaller()
         {
             metricService.count("test.metric");
 
-            // Verify class tag exists (don't check specific value as it depends on stack)
             Counter counter = meterRegistry.find("test.metric_total").counter();
             assertThat(counter).isNotNull();
 
@@ -458,7 +404,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should add method tag from caller")
         void shouldAddMethodTagFromCaller()
         {
             metricService.count("test.metric");
@@ -472,7 +417,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should add standard tags to exception metrics")
         void shouldAddStandardTagsToExceptionMetrics()
         {
             metricService.trackException("test.failure", new RuntimeException("err"));
@@ -490,7 +434,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should add standard tags to error metrics")
         void shouldAddStandardTagsToErrorMetrics()
         {
             metricService.trackError("test.error", "msg");
@@ -504,7 +447,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should add standard tags to timer metrics")
         void shouldAddStandardTagsToTimerMetrics()
         {
             metricService.recordTime("test.duration", 100);
@@ -518,14 +460,10 @@ class MetricServiceTest
         }
     }
 
-    // ── Integration Tests ──────────────────────────────────────────
-
     @Nested
-    @DisplayName("Integration Tests")
     class IntegrationTests
     {
         @Test
-        @DisplayName("Should handle complete workflow")
         void shouldHandleCompleteWorkflow()
         {
             metricService.count("api.request", "endpoint", "/orders");
@@ -551,7 +489,6 @@ class MetricServiceTest
         }
 
         @Test
-        @DisplayName("Should track multiple metrics with same name and different tags")
         void shouldTrackMultipleMetricsWithDifferentTags()
         {
             metricService.count("orders.processed", "store", "store-1", "status", "success");

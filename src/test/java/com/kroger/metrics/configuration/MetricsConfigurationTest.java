@@ -17,7 +17,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("MetricsConfig Tests")
 class MetricsConfigurationTest
 {
     private MetricsConfiguration metricsConfiguration;
@@ -28,21 +27,16 @@ class MetricsConfigurationTest
         metricsConfiguration = new MetricsConfiguration();
     }
 
-    // ── setAdditionalPrefixes / getAdditionalPrefixes Tests ───────────
-
     @Nested
-    @DisplayName("AdditionalPrefixes Property Tests")
     class AdditionalPrefixesTests
     {
         @Test
-        @DisplayName("Should return empty list by default")
         void shouldReturnEmptyListByDefault()
         {
             assertThat(metricsConfiguration.getAdditionalPrefixes()).isEmpty();
         }
 
         @Test
-        @DisplayName("Should store and return set prefixes")
         void shouldStoreAndReturnPrefixes()
         {
             metricsConfiguration.setAdditionalPrefixes(List.of("business", "custom"));
@@ -52,7 +46,6 @@ class MetricsConfigurationTest
         }
 
         @Test
-        @DisplayName("Should replace existing prefixes on set")
         void shouldReplacePrefixesOnSet()
         {
             metricsConfiguration.setAdditionalPrefixes(List.of("old"));
@@ -63,7 +56,6 @@ class MetricsConfigurationTest
         }
 
         @Test
-        @DisplayName("Should use empty list when null is set")
         void shouldUseEmptyListWhenNullSet()
         {
             metricsConfiguration.setAdditionalPrefixes(null);
@@ -72,14 +64,10 @@ class MetricsConfigurationTest
         }
     }
 
-    // ── logConfig Tests ───────────────────────────────────────────────
-
     @Nested
-    @DisplayName("logConfig Tests")
     class LogConfigTests
     {
         @Test
-        @DisplayName("Should not throw on logConfig call")
         void shouldNotThrow()
         {
             metricsConfiguration.setAdditionalPrefixes(List.of("business"));
@@ -87,21 +75,16 @@ class MetricsConfigurationTest
         }
 
         @Test
-        @DisplayName("Should not throw with empty additional prefixes")
         void shouldNotThrowWithEmptyPrefixes()
         {
             assertDoesNotThrow(() -> metricsConfiguration.logConfig());
         }
     }
 
-    // ── meterFilter() Bean Tests ──────────────────────────────────────
-
     @Nested
-    @DisplayName("MeterFilter Bean Tests")
     class MeterFilterTests
     {
         @Test
-        @DisplayName("Should return non-null MeterFilter bean")
         void shouldReturnNonNullFilter()
         {
             MeterFilter filter = metricsConfiguration.meterFilter();
@@ -110,7 +93,6 @@ class MetricsConfigurationTest
         }
 
         @Test
-        @DisplayName("Should allow jvm.memory metric")
         void shouldAllowJvmMemoryMetric()
         {
             MeterFilter filter = metricsConfiguration.meterFilter();
@@ -120,7 +102,6 @@ class MetricsConfigurationTest
         }
 
         @Test
-        @DisplayName("Should allow jvm.threads metric")
         void shouldAllowJvmThreadsMetric()
         {
             MeterFilter filter = metricsConfiguration.meterFilter();
@@ -130,7 +111,6 @@ class MetricsConfigurationTest
         }
 
         @Test
-        @DisplayName("Should allow http.server metric")
         void shouldAllowHttpServerMetric()
         {
             MeterFilter filter = metricsConfiguration.meterFilter();
@@ -140,7 +120,6 @@ class MetricsConfigurationTest
         }
 
         @Test
-        @DisplayName("Should allow process.cpu metric")
         void shouldAllowProcessCpuMetric()
         {
             MeterFilter filter = metricsConfiguration.meterFilter();
@@ -150,7 +129,6 @@ class MetricsConfigurationTest
         }
 
         @Test
-        @DisplayName("Should allow system.cpu metric")
         void shouldAllowSystemCpuMetric()
         {
             MeterFilter filter = metricsConfiguration.meterFilter();
@@ -160,7 +138,6 @@ class MetricsConfigurationTest
         }
 
         @Test
-        @DisplayName("Should allow logback metric")
         void shouldAllowLogbackMetric()
         {
             MeterFilter filter = metricsConfiguration.meterFilter();
@@ -170,7 +147,6 @@ class MetricsConfigurationTest
         }
 
         @Test
-        @DisplayName("Should deny unknown metric not in default or additional prefixes")
         void shouldDenyUnknownMetric()
         {
             MeterFilter filter = metricsConfiguration.meterFilter();
@@ -180,7 +156,6 @@ class MetricsConfigurationTest
         }
 
         @Test
-        @DisplayName("Should allow metric matching additional prefix")
         void shouldAllowAdditionalPrefixMetric()
         {
             metricsConfiguration.setAdditionalPrefixes(List.of("business.day"));
@@ -191,7 +166,6 @@ class MetricsConfigurationTest
         }
 
         @Test
-        @DisplayName("Should deny metric not matching additional prefix")
         void shouldDenyMetricNotMatchingAdditionalPrefix()
         {
             metricsConfiguration.setAdditionalPrefixes(List.of("business.day"));
@@ -202,7 +176,6 @@ class MetricsConfigurationTest
         }
 
         @Test
-        @DisplayName("Should allow metric matching any of multiple additional prefixes")
         void shouldAllowMetricMatchingOneOfMultiplePrefixes()
         {
             metricsConfiguration.setAdditionalPrefixes(List.of("business.day", "store.ops"));
@@ -213,7 +186,6 @@ class MetricsConfigurationTest
         }
 
         @Test
-        @DisplayName("Should return DENY when metric name is blank (empty string)")
         void shouldReturnDenyForBlankMetricName()
         {
             MeterFilter filter = metricsConfiguration.meterFilter();
@@ -223,12 +195,8 @@ class MetricsConfigurationTest
         }
 
         @Test
-        @DisplayName("Should return NEUTRAL and not throw when isAllowed throws internally")
         void shouldReturnNeutralWhenFilterThrowsInternally()
         {
-            // The try-catch in accept() returns NEUTRAL on any unexpected exception.
-            // Simulate by passing a metric name that is neither null, blank, nor a known prefix,
-            // confirming DENY is the normal path and the filter does not propagate exceptions.
             MeterFilter filter = metricsConfiguration.meterFilter();
             Meter.Id id = new Meter.Id("unknown.metric", Tags.empty(), null, null, Meter.Type.COUNTER);
 

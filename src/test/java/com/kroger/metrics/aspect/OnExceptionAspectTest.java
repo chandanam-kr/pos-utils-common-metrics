@@ -2,8 +2,6 @@ package com.kroger.metrics.aspect;
 
 import com.kroger.metrics.annotation.OnException;
 import com.kroger.metrics.annotation.Track;
-import com.kroger.metrics.aspect.MetricAspect;
-import com.kroger.metrics.aspect.OnExceptionAspect;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -11,7 +9,6 @@ import jakarta.xml.bind.ValidationException;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,7 +28,6 @@ import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("OnExceptionAspect Tests")
 class OnExceptionAspectTest
 {
     private OnExceptionAspect onExceptionAspect;
@@ -52,14 +48,10 @@ class OnExceptionAspectTest
         onExceptionAspect = new OnExceptionAspect(meterRegistry, metricAspect);
     }
 
-    // ── Success Path Tests ─────────────────────────────────────────
-
     @Nested
-    @DisplayName("Success Path Tests")
     class SuccessPathTests
     {
         @Test
-        @DisplayName("Should not record metric on successful execution")
         void shouldNotRecordOnSuccess() throws Throwable
         {
             OnException onException = createOnException("test.event", new String[]{},
@@ -74,7 +66,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should return method result on success")
         void shouldReturnMethodResult() throws Throwable
         {
             OnException onException = createOnException("test.event", new String[]{},
@@ -88,14 +79,10 @@ class OnExceptionAspectTest
         }
     }
 
-    // ── Default Failure Tests ──────────────────────────────────────
-
     @Nested
-    @DisplayName("Default Failure Tests")
     class DefaultFailureTests
     {
         @Test
-        @DisplayName("Should record default failure when no track list defined")
         void shouldRecordDefaultFailure() throws Throwable
         {
             OnException onException = createOnException("business.day.get.active",
@@ -112,7 +99,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should not record default when on is empty")
         void shouldNotRecordWhenOnIsEmpty() throws Throwable
         {
             OnException onException = createOnException("", new String[]{},
@@ -127,7 +113,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should add exception tag to default failure metric")
         void shouldAddExceptionTag() throws Throwable
         {
             OnException onException = createOnException("business.day.api",
@@ -145,7 +130,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should add message tag to default failure")
         void shouldAddMessageTag() throws Throwable
         {
             OnException onException = createOnException("business.day.api",
@@ -163,7 +147,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should handle exception with null message")
         void shouldHandleNullMessage() throws Throwable
         {
             OnException onException = createOnException("business.day.api",
@@ -181,7 +164,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should set critical false for default failures")
         void shouldSetCriticalFalseForDefault() throws Throwable
         {
             OnException onException = createOnException("business.day.api",
@@ -199,7 +181,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should set status failure tag")
         void shouldSetStatusFailureTag() throws Throwable
         {
             OnException onException = createOnException("business.day.api",
@@ -217,14 +198,10 @@ class OnExceptionAspectTest
         }
     }
 
-    // ── Track Match Tests ──────────────────────────────────────────
-
     @Nested
-    @DisplayName("Track Match Tests")
     class TrackMatchTests
     {
         @Test
-        @DisplayName("Should record tracked exception metric")
         void shouldRecordTrackedException() throws Throwable
         {
             Track validationTrack = createTrack(ValidationException.class,
@@ -245,7 +222,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should record critical tracked exception")
         void shouldRecordCriticalTracked() throws Throwable
         {
             Track dbTrack = createTrack(DataFormatException.class,
@@ -267,7 +243,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should match first track entry")
         void shouldMatchFirstTrack() throws Throwable
         {
             Track track1 = createTrack(ValidationException.class, "first.metric", false);
@@ -287,7 +262,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should not record when track does not match")
         void shouldNotRecordWhenNoTrackMatch() throws Throwable
         {
             Track track = createTrack(ValidationException.class, "validation.failure", false);
@@ -305,7 +279,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should match exception subclass")
         void shouldMatchSubclass() throws Throwable
         {
             Track track = createTrack(RuntimeException.class, "runtime.failure", false);
@@ -324,14 +297,10 @@ class OnExceptionAspectTest
         }
     }
 
-    // ── Track With Default Tests ───────────────────────────────────
-
     @Nested
-    @DisplayName("Track With Default Tests")
     class TrackWithDefaultTests
     {
         @Test
-        @DisplayName("Should use track when exception matches")
         void shouldUseTrackWhenMatches() throws Throwable
         {
             Track validationTrack = createTrack(ValidationException.class,
@@ -351,7 +320,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should use default when no track matches")
         void shouldUseDefaultWhenNoMatch() throws Throwable
         {
             Track validationTrack = createTrack(ValidationException.class,
@@ -371,14 +339,10 @@ class OnExceptionAspectTest
         }
     }
 
-    // ── Ignore List Tests ──────────────────────────────────────────
-
     @Nested
-    @DisplayName("Ignore List Tests")
     class IgnoreListTests
     {
         @Test
-        @DisplayName("Should not record when exception is in ignore list")
         void shouldNotRecordIgnoredException() throws Throwable
         {
             OnException onException = createOnException("business.day.api",
@@ -396,7 +360,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should record when exception not in ignore list")
         void shouldRecordWhenNotIgnored() throws Throwable
         {
             OnException onException = createOnException("business.day.api",
@@ -414,7 +377,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should handle multiple ignored exceptions")
         void shouldHandleMultipleIgnored() throws Throwable
         {
             OnException onException = createOnException("business.day.api",
@@ -435,7 +397,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should ignore subclass of ignored exception")
         void shouldIgnoreSubclass() throws Throwable
         {
             OnException onException = createOnException("business.day.api",
@@ -453,14 +414,10 @@ class OnExceptionAspectTest
         }
     }
 
-    // ── Tags Tests ─────────────────────────────────────────────────
-
     @Nested
-    @DisplayName("Tags Tests")
     class TagsTests
     {
         @Test
-        @DisplayName("Should add class and method tags")
         void shouldAddClassAndMethodTags() throws Throwable
         {
             OnException onException = createOnException("business.day.api",
@@ -480,7 +437,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should add custom constant tags")
         void shouldAddCustomConstantTags() throws Throwable
         {
             OnException onException = createOnException("business.day.api",
@@ -500,7 +456,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should resolve dynamic parameter tags")
         void shouldResolveDynamicTags() throws Throwable
         {
             Parameter[] parameters = createParameters("storeId");
@@ -523,7 +478,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should resolve nested field tags")
         void shouldResolveNestedFields() throws Throwable
         {
             TestRequest request = new TestRequest("DLT123", "STORE-1");
@@ -547,14 +501,10 @@ class OnExceptionAspectTest
         }
     }
 
-    // ── Exception Propagation Tests ────────────────────────────────
-
     @Nested
-    @DisplayName("Exception Propagation Tests")
     class ExceptionPropagationTests
     {
         @Test
-        @DisplayName("Should always rethrow user exception")
         void shouldAlwaysRethrowException() throws Throwable
         {
             OnException onException = createOnException("business.day.api",
@@ -572,7 +522,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should rethrow even when exception is ignored")
         void shouldRethrowIgnoredException() throws Throwable
         {
             OnException onException = createOnException("business.day.api",
@@ -592,7 +541,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should rethrow even when metric recording fails")
         void shouldRethrowWhenMetricFails() throws Throwable
         {
             MeterRegistry brokenRegistry = mock(MeterRegistry.class);
@@ -616,7 +564,6 @@ class OnExceptionAspectTest
         }
 
         @Test
-        @DisplayName("Should not break when metric recording fails")
         void shouldNotBreakOnMetricFailure() throws Throwable
         {
             MeterRegistry brokenRegistry = mock(MeterRegistry.class);
@@ -641,23 +588,12 @@ class OnExceptionAspectTest
         }
     }
 
-    // ── Helper Methods ─────────────────────────────────────────────
-
     private OnException createOnException(String on, String[] tags,
                                           Class<? extends Throwable>[] ignore,
                                           Track[] track)
     {
         OnException onException = mock(OnException.class);
         lenient().when(onException.on()).thenReturn(on);
-        lenient().when(onException.tags()).thenReturn(tags);
-        lenient().when(onException.ignore()).thenReturn(ignore);
-        lenient().when(onException.track()).thenReturn(track);
-        return onException;
-    }
-
-    private OnException createOnException(String[] tags, Class<? extends Throwable>[] ignore, Track[] track)
-    {
-        OnException onException = mock(OnException.class);
         lenient().when(onException.tags()).thenReturn(tags);
         lenient().when(onException.ignore()).thenReturn(ignore);
         lenient().when(onException.track()).thenReturn(track);
@@ -700,11 +636,8 @@ class OnExceptionAspectTest
         return parameters;
     }
 
-    // ── Test Helper Classes ────────────────────────────────────────
-
     static class SampleService
     {
-        // Class name "SampleService" used in tests
     }
 
     static class TestRequest

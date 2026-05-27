@@ -74,6 +74,10 @@ public final class MetricsConstants
             Map.entry("terminated",             "finished_execution")
     );
 
+    public static final String TAG_CLIENT_ERROR = "client_error";
+    public static final String TAG_SERVER_ERROR = "server_error";
+    public static final String TAG_UNKNOWN = "unknown";
+
     public static final List<String> DEFAULT_ALLOWED = List.of(
             "jvm.memory",
             "jvm.threads",
@@ -106,6 +110,7 @@ public final class MetricsConstants
     public static final String TAG_EXCEPTION    = "exception";
     public static final String TAG_MESSAGE      = "message";
     public static final String TAG_CRITICAL     = "critical";
+    public static final String STATUS_SUCCESS   = "success";
     // Metric suffixes
     public static final String SUFFIX_COUNTER   = "_total";
     public static final String SUFFIX_TIMER     = "_duration_seconds";

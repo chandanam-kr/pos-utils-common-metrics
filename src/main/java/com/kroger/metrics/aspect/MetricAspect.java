@@ -12,7 +12,6 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Parameter;
@@ -21,8 +20,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
-import static com.kroger.metrics.constants.MetricsConstants.GET;
-import static com.kroger.metrics.constants.MetricsConstants.METRIC_RECORDING_FAILED_LOG;
+import static com.kroger.metrics.constants.MetricsConstants.*;
 
 /**
  * Records metrics for methods annotated with @Metric.
@@ -71,17 +69,16 @@ public class MetricAspect
         {
             int statusCode = response.getStatusCode().value();
 
-            if (statusCode >= 200 && statusCode < 300) return "success";
-            if (statusCode >= 400 && statusCode < 500) return "client_error";
-            if (statusCode >= 500) return "server_error";
-            return "unknown";
+            if (statusCode >= 200 && statusCode < 300) return STATUS_SUCCESS;
+            if (statusCode >= 400 && statusCode < 500) return MetricsConstants.TAG_CLIENT_ERROR;
+            if (statusCode >= 500) return MetricsConstants.TAG_SERVER_ERROR;
+            return MetricsConstants.TAG_UNKNOWN;
         }
 
-        return "success";
+        return STATUS_SUCCESS;
     }
 
-    private void recordSafely(ProceedingJoinPoint joinPoint, Metric metric,
-                              long startTime, String status, Throwable throwable)
+    private void recordSafely(ProceedingJoinPoint joinPoint, Metric metric, long startTime, String status, Throwable throwable)
     {
         try
         {
@@ -90,9 +87,9 @@ public class MetricAspect
 
             if (throwable != null)
             {
-                tags.add(Tag.of("exception", throwable.getClass().getSimpleName()));
-                tags.add(Tag.of("message", throwable.getMessage() != null
-                        ? throwable.getMessage() : "no_message"));
+                tags.add(Tag.of(TAG_EXCEPTION, throwable.getClass().getSimpleName()));
+                tags.add(Tag.of(TAG_MESSAGE, throwable.getMessage() != null
+                        ? throwable.getMessage() : NO_MESSAGE));
             }
 
             record(metric, tags, startTime);

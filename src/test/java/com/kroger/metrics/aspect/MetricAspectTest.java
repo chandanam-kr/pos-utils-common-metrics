@@ -2,7 +2,6 @@ package com.kroger.metrics.aspect;
 
 import com.kroger.metrics.annotation.Metric;
 import com.kroger.metrics.annotation.MetricType;
-import com.kroger.metrics.aspect.MetricAspect;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
@@ -31,7 +30,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("MetricAspect Tests")
 class MetricAspectTest
 {
     private MetricAspect metricAspect;
@@ -51,11 +49,9 @@ class MetricAspectTest
     }
 
     @Nested
-    @DisplayName("Counter Metric Tests")
     class CounterTests
     {
         @Test
-        @DisplayName("Should record counter when type is COUNTER")
         void shouldRecordCounter() throws Throwable
         {
             Metric metric = createMetric("test.counter", MetricType.COUNTER, new String[]{});
@@ -69,7 +65,6 @@ class MetricAspectTest
         }
 
         @Test
-        @DisplayName("Should add class and method tags to counter")
         void shouldAddClassAndMethodTags() throws Throwable
         {
             Metric metric = createMetric("test.counter", MetricType.COUNTER, new String[]{});
@@ -85,7 +80,6 @@ class MetricAspectTest
         }
 
         @Test
-        @DisplayName("Should add success status tag")
         void shouldAddSuccessStatusTag() throws Throwable
         {
             Metric metric = createMetric("test.counter", MetricType.COUNTER, new String[]{});
@@ -100,7 +94,6 @@ class MetricAspectTest
         }
 
         @Test
-        @DisplayName("Should increment counter on multiple calls")
         void shouldIncrementCounterMultipleTimes() throws Throwable
         {
             Metric metric = createMetric("test.counter", MetricType.COUNTER, new String[]{});
@@ -116,11 +109,9 @@ class MetricAspectTest
     }
 
     @Nested
-    @DisplayName("Timer Metric Tests")
     class TimerTests
     {
         @Test
-        @DisplayName("Should record timer when type is TIMER")
         void shouldRecordTimer() throws Throwable
         {
             Metric metric = createMetric("test.timer", MetricType.TIMER, new String[]{});
@@ -134,7 +125,6 @@ class MetricAspectTest
         }
 
         @Test
-        @DisplayName("Should record duration greater than zero")
         void shouldRecordDuration() throws Throwable
         {
             Metric metric = createMetric("test.timer", MetricType.TIMER, new String[]{});
@@ -154,11 +144,9 @@ class MetricAspectTest
     }
 
     @Nested
-    @DisplayName("Gauge Metric Tests")
     class GaugeTests
     {
         @Test
-        @DisplayName("Should record gauge when type is GAUGE")
         void shouldRecordGauge() throws Throwable
         {
             Metric metric = createMetric("test.gauge", MetricType.GAUGE, new String[]{});
@@ -170,14 +158,10 @@ class MetricAspectTest
         }
     }
 
-    // ── ALL Type Tests ─────────────────────────────────────────────
-
     @Nested
-    @DisplayName("ALL Metric Type Tests")
     class AllTypeTests
     {
         @Test
-        @DisplayName("Should record both counter and timer when type is ALL")
         void shouldRecordCounterAndTimer() throws Throwable
         {
             Metric metric = createMetric("test.all", MetricType.ALL, new String[]{});
@@ -196,11 +180,9 @@ class MetricAspectTest
     }
 
     @Nested
-    @DisplayName("Tag Resolution Tests")
     class TagResolutionTests
     {
         @Test
-        @DisplayName("Should add constant tag")
         void shouldAddConstantTag() throws Throwable
         {
             Metric metric = createMetric("test.metric", MetricType.COUNTER,
@@ -216,7 +198,6 @@ class MetricAspectTest
         }
 
         @Test
-        @DisplayName("Should resolve simple parameter tag")
         void shouldResolveSimpleParameter() throws Throwable
         {
             Parameter[] parameters = createParameters("storeId");
@@ -235,7 +216,6 @@ class MetricAspectTest
         }
 
         @Test
-        @DisplayName("Should resolve nested field tag using getter")
         void shouldResolveNestedFieldViaGetter() throws Throwable
         {
             TestRequest request    = new TestRequest("DLT123", "STORE-1");
@@ -255,7 +235,6 @@ class MetricAspectTest
         }
 
         @Test
-        @DisplayName("Should resolve multiple nested fields")
         void shouldResolveMultipleNestedFields() throws Throwable
         {
             TestRequest request    = new TestRequest("DLT123", "STORE-1");
@@ -279,7 +258,6 @@ class MetricAspectTest
         }
 
         @Test
-        @DisplayName("Should return unresolved for missing parameter")
         void shouldReturnUnresolvedForMissingParam() throws Throwable
         {
             Metric metric = createMetric("test.metric", MetricType.COUNTER,
@@ -295,7 +273,6 @@ class MetricAspectTest
         }
 
         @Test
-        @DisplayName("Should return null for null parameter value")
         void shouldReturnNullForNullParam() throws Throwable
         {
             Parameter[] parameters = createParameters("storeId");
@@ -314,7 +291,6 @@ class MetricAspectTest
         }
 
         @Test
-        @DisplayName("Should skip malformed tag without equals")
         void shouldSkipMalformedTag() throws Throwable
         {
             Metric metric = createMetric("test.metric", MetricType.COUNTER,
@@ -331,7 +307,6 @@ class MetricAspectTest
         }
 
         @Test
-        @DisplayName("Should handle multiple constant tags")
         void shouldHandleMultipleConstantTags() throws Throwable
         {
             Metric metric = createMetric("test.metric", MetricType.COUNTER,
@@ -353,7 +328,6 @@ class MetricAspectTest
         }
 
         @Test
-        @DisplayName("Should handle mix of constants and dynamic tags")
         void shouldHandleMixedTags() throws Throwable
         {
             Parameter[] parameters = createParameters("storeId");
@@ -379,7 +353,6 @@ class MetricAspectTest
     }
 
     @Nested
-    @DisplayName("Exception Handling Tests")
     class ExceptionHandlingTests
     {
         @Test
@@ -399,7 +372,6 @@ class MetricAspectTest
         }
 
         @Test
-        @DisplayName("Should not break when metric recording fails")
         void shouldNotBreakWhenMetricFails() throws Throwable
         {
             MeterRegistry brokenRegistry = mock(MeterRegistry.class);
@@ -415,7 +387,6 @@ class MetricAspectTest
         }
 
         @Test
-        @DisplayName("Should return method result even when metric fails")
         void shouldReturnMethodResult() throws Throwable
         {
             Metric metric = createMetric("test.metric", MetricType.COUNTER, new String[]{});
@@ -429,7 +400,6 @@ class MetricAspectTest
         }
 
         @Test
-        @DisplayName("Should propagate checked exception")
         void shouldPropagateCheckedException() throws Throwable
         {
             Metric metric = createMetric("test.metric", MetricType.COUNTER, new String[]{});
@@ -446,11 +416,9 @@ class MetricAspectTest
     }
 
     @Nested
-    @DisplayName("buildTags Method Tests")
     class BuildTagsTests
     {
         @Test
-        @DisplayName("Should always include class and method tags")
         void shouldIncludeClassAndMethodTags()
         {
             List<Tag> tags = metricAspect.buildTags(
@@ -467,7 +435,6 @@ class MetricAspectTest
         }
 
         @Test
-        @DisplayName("Should return only base tags when no annotation tags")
         void shouldReturnOnlyBaseTags()
         {
             List<Tag> tags = metricAspect.buildTags(
@@ -482,7 +449,6 @@ class MetricAspectTest
         }
 
         @Test
-        @DisplayName("Should add annotation tags to base tags")
         void shouldAddAnnotationTags()
         {
             List<Tag> tags = metricAspect.buildTags(
@@ -499,7 +465,6 @@ class MetricAspectTest
         }
 
         @Test
-        @DisplayName("Should skip malformed tags")
         void shouldSkipMalformedTags()
         {
             List<Tag> tags = metricAspect.buildTags(
@@ -513,6 +478,185 @@ class MetricAspectTest
             assertThat(tags).hasSize(4);
             assertThat(tags).contains(Tag.of("valid", "value"));
             assertThat(tags).contains(Tag.of("another", "valid"));
+        }
+    }
+
+    @Nested
+    class ResponseEntityStatusTests
+    {
+        @Test
+        void shouldUseSuccessStatusFor2xx() throws Throwable
+        {
+            Metric metric = createMetric("http.call", MetricType.COUNTER, new String[]{});
+            setupJoinPoint(new SampleService(), "doWork", new Parameter[]{}, new Object[]{});
+            when(joinPoint.proceed()).thenReturn(org.springframework.http.ResponseEntity.ok("body"));
+
+            metricAspect.capture(joinPoint, metric);
+
+            Counter counter = meterRegistry.find("http.call_total")
+                    .tag("status", "success")
+                    .counter();
+            assertThat(counter).isNotNull();
+            assertThat(counter.count()).isEqualTo(1.0);
+        }
+
+        @Test
+        void shouldUseClientErrorStatusFor4xx() throws Throwable
+        {
+            Metric metric = createMetric("http.call", MetricType.COUNTER, new String[]{});
+            setupJoinPoint(new SampleService(), "doWork", new Parameter[]{}, new Object[]{});
+            when(joinPoint.proceed()).thenReturn(
+                    org.springframework.http.ResponseEntity.status(400).body("bad request"));
+
+            metricAspect.capture(joinPoint, metric);
+
+            Counter counter = meterRegistry.find("http.call_total")
+                    .tag("status", "client_error")
+                    .counter();
+            assertThat(counter).isNotNull();
+            assertThat(counter.count()).isEqualTo(1.0);
+        }
+
+        @Test
+        void shouldUseServerErrorStatusFor5xx() throws Throwable
+        {
+            Metric metric = createMetric("http.call", MetricType.COUNTER, new String[]{});
+            setupJoinPoint(new SampleService(), "doWork", new Parameter[]{}, new Object[]{});
+            when(joinPoint.proceed()).thenReturn(
+                    org.springframework.http.ResponseEntity.status(500).body("server error"));
+
+            metricAspect.capture(joinPoint, metric);
+
+            Counter counter = meterRegistry.find("http.call_total")
+                    .tag("status", "server_error")
+                    .counter();
+            assertThat(counter).isNotNull();
+        }
+
+        @Test
+        void shouldUseUnknownStatusFor3xx() throws Throwable
+        {
+            Metric metric = createMetric("http.call", MetricType.COUNTER, new String[]{});
+            setupJoinPoint(new SampleService(), "doWork", new Parameter[]{}, new Object[]{});
+            when(joinPoint.proceed()).thenReturn(
+                    org.springframework.http.ResponseEntity.status(302).build());
+
+            metricAspect.capture(joinPoint, metric);
+
+            Counter counter = meterRegistry.find("http.call_total")
+                    .tag("status", "unknown")
+                    .counter();
+            assertThat(counter).isNotNull();
+        }
+
+        @Test
+        void shouldUseSuccessStatusForNonResponseEntity() throws Throwable
+        {
+            Metric metric = createMetric("service.call", MetricType.COUNTER, new String[]{});
+            setupJoinPoint(new SampleService(), "doWork", new Parameter[]{}, new Object[]{});
+            when(joinPoint.proceed()).thenReturn("plain string result");
+
+            metricAspect.capture(joinPoint, metric);
+
+            Counter counter = meterRegistry.find("service.call_total")
+                    .tag("status", "success")
+                    .counter();
+            assertThat(counter).isNotNull();
+        }
+
+        @Test
+        void shouldUseSuccessStatusForNullResult() throws Throwable
+        {
+            Metric metric = createMetric("service.call", MetricType.COUNTER, new String[]{});
+            setupJoinPoint(new SampleService(), "doWork", new Parameter[]{}, new Object[]{});
+            when(joinPoint.proceed()).thenReturn(null);
+
+            metricAspect.capture(joinPoint, metric);
+
+            Counter counter = meterRegistry.find("service.call_total")
+                    .tag("status", "success")
+                    .counter();
+            assertThat(counter).isNotNull();
+        }
+    }
+
+    @Nested
+    class DirectFieldAccessTests
+    {
+        @Test
+        void shouldResolveNestedFieldViaDirectFieldAccess() throws Throwable
+        {
+            // Use object without getter - direct field access
+            NoGetterRequest request = new NoGetterRequest("STORE-123", "US");
+            Parameter[] parameters = createParameters("req");
+            Object[] args = {request};
+
+            List<Tag> tags = metricAspect.buildTags(
+                    new String[]{"store=#req.storeId"},
+                    "TestClass",
+                    "testMethod",
+                    parameters,
+                    args
+            );
+
+            assertThat(tags).extracting(tag -> tag.getKey() + "=" + tag.getValue())
+                    .contains("store=STORE-123");
+        }
+
+        @Test
+        void shouldReturnUnresolvedForMissingField() throws Throwable
+        {
+            NoGetterRequest request = new NoGetterRequest("STORE-123", "US");
+            Parameter[] parameters = createParameters("req");
+            Object[] args = {request};
+
+            List<Tag> tags = metricAspect.buildTags(
+                    new String[]{"country=#req.nonExistentField"},
+                    "TestClass",
+                    "testMethod",
+                    parameters,
+                    args
+            );
+
+            assertThat(tags).extracting(tag -> tag.getKey() + "=" + tag.getValue())
+                    .contains("country=unresolved");
+        }
+
+        @Test
+        void shouldReturnUnresolvedWhenParamNotFoundForNested()
+        {
+            Parameter[] parameters = createParameters("other");
+            Object[] args = {"some value"};
+
+            List<Tag> tags = metricAspect.buildTags(
+                    new String[]{"store=#req.storeId"},
+                    "TestClass",
+                    "testMethod",
+                    parameters,
+                    args
+            );
+
+            assertThat(tags).extracting(tag -> tag.getKey() + "=" + tag.getValue())
+                    .contains("store=unresolved");
+        }
+
+        @Test
+        void shouldReturnNullValueWhenFieldIsNull()
+        {
+            NoGetterRequest request = new NoGetterRequest(null, "US");
+            Parameter[] parameters = createParameters("req");
+            Object[] args = {request};
+
+            List<Tag> tags = metricAspect.buildTags(
+                    new String[]{"store=#req.storeId"},
+                    "TestClass",
+                    "testMethod",
+                    parameters,
+                    args
+            );
+
+            assertThat(tags).extracting(tag -> tag.getKey() + "=" + tag.getValue())
+                    .contains("store=null");
         }
     }
 
@@ -554,7 +698,6 @@ class MetricAspectTest
 
     static class SampleService
     {
-        // Class name "SampleService" used in tests
     }
 
     static class TestRequest
@@ -576,6 +719,18 @@ class MetricAspectTest
         public String getStoreId()
         {
             return storeId;
+        }
+    }
+
+    static class NoGetterRequest
+    {
+        String storeId;
+        String country;
+
+        public NoGetterRequest(String storeId, String country)
+        {
+            this.storeId = storeId;
+            this.country = country;
         }
     }
 }
