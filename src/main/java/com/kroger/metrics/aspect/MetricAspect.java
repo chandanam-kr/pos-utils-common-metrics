@@ -30,7 +30,6 @@ import static com.kroger.metrics.constants.MetricsConstants.METRIC_RECORDING_FAI
  */
 @Slf4j
 @Aspect
-@Component
 public class MetricAspect
 {
     private final MeterRegistry meterRegistry;

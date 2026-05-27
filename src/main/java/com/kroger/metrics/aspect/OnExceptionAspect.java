@@ -27,7 +27,6 @@ import static com.kroger.metrics.constants.MetricsConstants.*;
  */
 @Slf4j
 @Aspect
-@Component
 public class OnExceptionAspect
 {
     private final MeterRegistry meterRegistry;

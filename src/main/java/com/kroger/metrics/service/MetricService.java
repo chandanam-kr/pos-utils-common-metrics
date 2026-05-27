@@ -18,7 +18,6 @@ import java.util.concurrent.TimeUnit;
  * All operations are safe and will not break user code if metric recording fails.
  */
 @Slf4j
-@Service
 public class MetricService
 {
     private final MeterRegistry meterRegistry;
