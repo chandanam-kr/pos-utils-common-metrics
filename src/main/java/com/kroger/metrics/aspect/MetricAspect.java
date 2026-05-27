@@ -11,6 +11,7 @@ import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Field;
@@ -24,8 +25,8 @@ import static com.kroger.metrics.constants.MetricsConstants.GET;
 import static com.kroger.metrics.constants.MetricsConstants.METRIC_RECORDING_FAILED_LOG;
 
 /**
- * Records success metrics for methods annotated with @Metric.
- * Failures are caught silently to never break user code.
+ * Records metrics for methods annotated with @Metric.
+ * Tracks success/failure based on actual outcome.
  */
 @Slf4j
 @Aspect
@@ -44,16 +45,56 @@ public class MetricAspect
     {
         long startTime = System.currentTimeMillis();
 
-        recordSafely(joinPoint, metric, startTime);
-        return joinPoint.proceed();
+        try
+        {
+            Object result = joinPoint.proceed();
+
+            String status = determineStatus(result);
+            recordSafely(joinPoint, metric, startTime, status, null);
+
+            return result;
+        }
+        catch (Throwable throwable)
+        {
+            recordSafely(joinPoint, metric, startTime, "failure", throwable);
+            throw throwable;
+        }
     }
 
-    private void recordSafely(ProceedingJoinPoint joinPoint, Metric metric, long startTime)
+    /**
+     * Determines the actual status based on method result.
+     * For HTTP ResponseEntity - checks status code.
+     * For other types - assumes success if no exception.
+     */
+    private String determineStatus(Object result)
+    {
+        if (result instanceof ResponseEntity<?> response)
+        {
+            int statusCode = response.getStatusCode().value();
+
+            if (statusCode >= 200 && statusCode < 300) return "success";
+            if (statusCode >= 400 && statusCode < 500) return "client_error";
+            if (statusCode >= 500) return "server_error";
+            return "unknown";
+        }
+
+        return "success";
+    }
+
+    private void recordSafely(ProceedingJoinPoint joinPoint, Metric metric,
+                              long startTime, String status, Throwable throwable)
     {
         try
         {
             List<Tag> tags = buildTags(joinPoint, metric);
-            tags.add(Tag.of(MetricsConstants.TAG_STATUS, MetricsConstants.STATUS_SUCCESS));
+            tags.add(Tag.of(MetricsConstants.TAG_STATUS, status));
+
+            if (throwable != null)
+            {
+                tags.add(Tag.of("exception", throwable.getClass().getSimpleName()));
+                tags.add(Tag.of("message", throwable.getMessage() != null
+                        ? throwable.getMessage() : "no_message"));
+            }
 
             record(metric, tags, startTime);
         }
@@ -96,10 +137,6 @@ public class MetricAspect
         meterRegistry.gauge(name, tags, System.currentTimeMillis() - startTime);
     }
 
-    /**
-     * Builds tags from method context and annotation.
-     * Shared with OnExceptionAspect via public method.
-     */
     public List<Tag> buildTags(ProceedingJoinPoint joinPoint, Metric metric)
     {
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
@@ -123,7 +160,7 @@ public class MetricAspect
         return tags;
     }
 
-    private java.util.Optional<Tag> parseTag(String tag, Parameter[] parameters, Object[] args)
+    private Optional<Tag> parseTag(String tag, Parameter[] parameters, Object[] args)
     {
         String[] kv = tag.split(MetricsConstants.TAG_SEPARATOR, 2);
         if (kv.length != 2)

@@ -1,4 +1,4 @@
-package com.kroger.metrics.config;
+package com.kroger.metrics.configuration;
 
 import com.kroger.metrics.aspect.MetricAspect;
 import com.kroger.metrics.aspect.OnExceptionAspect;
@@ -18,7 +18,7 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
  */
 @AutoConfiguration
 @EnableAspectJAutoProxy
-@EnableConfigurationProperties(MetricsConfig.class)
+@EnableConfigurationProperties(MetricsConfiguration.class)
 @ConditionalOnClass({MeterRegistry.class, PrometheusMeterRegistry.class})
 public class MetricsAutoConfiguration
 {

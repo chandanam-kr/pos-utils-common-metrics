@@ -1,4 +1,4 @@
-package com.kroger.metrics.config;
+package com.kroger.metrics.configuration;
 
 import com.kroger.metrics.constants.MetricsConstants;
 import io.micrometer.core.instrument.Meter;
@@ -22,7 +22,7 @@ import static com.kroger.metrics.constants.MetricsConstants.DEFAULT_ALLOWED;
 @Slf4j
 @Configuration
 @ConfigurationProperties(prefix = "metrics")
-public class MetricsConfig
+public class MetricsConfiguration
 {
 
     /**

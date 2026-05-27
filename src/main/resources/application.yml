@@ -6,7 +6,7 @@ management:
         include: health
   endpoint:
     prometheus:
-      enabled: false      # IMPORTANT: Disable to use our /metrics endpoint
+      enabled: false
     health:
       enabled: true
 

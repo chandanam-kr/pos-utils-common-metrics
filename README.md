@@ -495,6 +495,7 @@ Mark exceptions as critical when they require immediate attention:
 
 ```yaml
 metrics:
+  enabled: true
   additional-prefixes:
     - your.metric.prefix
 ```
@@ -584,3 +585,6 @@ com.kroger.metrics
     └── MetricsConstants.java - Metric and tag rename mappings
 ```
 
+### Kill Switch Concept in Auto-Configuration
+
+The auto-configuration now uses a **Kill Switch** concept to allow dynamic disabling of all custom metrics collection at runtime. This is implemented in `MetricsAutoConfiguration` and related beans. When the kill switch is enabled (via configuration or environment variable), all metric aspects and services become no-ops, ensuring zero impact on application performance or behavior. This is useful for emergency disables, troubleshooting, or compliance scenarios.

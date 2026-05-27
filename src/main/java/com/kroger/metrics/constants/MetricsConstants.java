@@ -98,7 +98,6 @@ public final class MetricsConstants
     public static final String TAG_METHOD       = "method";
     public static final String TAG_STATUS       = "status";
     // Tag values
-    public static final String STATUS_SUCCESS   = "success";
     public static final String STATUS_FAILURE   = "failure";
     public static final String STATUS_ERROR     = "error";
     public static final String UNRESOLVED       = "unresolved";
