@@ -2,7 +2,7 @@ name: Build and Release
 # Artifacts will be released from main branch.
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main" ,"custom_metrics"]
   workflow_dispatch:
 
 env:
@@ -11,74 +11,9 @@ env:
 
 jobs:
 
-  sonar-scan:
-    name: Sonar Scan & Quality Gate
-    runs-on: [ self-hosted, kubernetes, on-prem ]
-    container:
-      image: krogertechnology-docker.jfrog.io/library/maven:3.8.5-openjdk-17
-      credentials:
-        username: ${{secrets.ARTIFACTORY_IDENTITY_USER}}
-        password: ${{secrets.ARTIFACTORY_IDENTITY_TKN}}
-    outputs:
-      PROJECT_VERSION: ${{ steps.projectInfo.outputs.PROJECT_VERSION }}
-      PROJECT_GROUP: ${{ steps.projectInfo.outputs.PROJECT_GROUP }}
-      PROJECT_ARTIFACT: ${{ steps.projectInfo.outputs.PROJECT_ARTIFACT }}
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
-      - name: Cache Local Maven Repository
-        if: always()
-        uses: actions/cache@v3
-        with:
-          path: /root/.m2/repository
-          key: ${{ runner.os }}-maven-build-${{ github.run_number }}
-          restore-keys: ${{ runner.os }}-maven-build
-      - name: Download and Configure JFrog CLI
-        uses: krogertechnology/ngpos-utils-shared-actions/download-and-configure-jfrog-cli@main
-        with:
-          jfrog-access-token: ${{secrets.ARTIFACTORY_IDENTITY_TKN}}
-          jfrog-user-name: ${{secrets.ARTIFACTORY_IDENTITY_USER}}
-      - name: Store Project Information
-        id: projectInfo
-        run: |
-          PROJECT_VERSION=$(xmllint --xpath '/*[local-name()="project"]/*[local-name()="version"]/text()' pom.xml).${{github.run_number}}
-          echo "PROJECT_VERSION=${PROJECT_VERSION}"
-          echo "PROJECT_GROUP=$(xmllint --xpath '/*[local-name()="project"]/*[local-name()="groupId"]/text()' pom.xml)"
-          echo "PROJECT_ARTIFACT=$(xmllint --xpath '/*[local-name()="project"]/*[local-name()="artifactId"]/text()' pom.xml)"
-          echo "PROJECT_VERSION=${PROJECT_VERSION}" >> $GITHUB_OUTPUT
-          echo "PROJECT_GROUP=$(xmllint --xpath '/*[local-name()="project"]/*[local-name()="groupId"]/text()' pom.xml)" >> $GITHUB_OUTPUT
-          echo "PROJECT_ARTIFACT=$(xmllint --xpath '/*[local-name()="project"]/*[local-name()="artifactId"]/text()' pom.xml)" >> $GITHUB_OUTPUT
-          echo "PROJECT_VERSION=${PROJECT_VERSION}" >> $GITHUB_ENV
-          echo "PROJECT_GROUP=$(xmllint --xpath '/*[local-name()="project"]/*[local-name()="groupId"]/text()' pom.xml)" >> $GITHUB_ENV
-          echo "PROJECT_ARTIFACT=$(xmllint --xpath '/*[local-name()="project"]/*[local-name()="artifactId"]/text()' pom.xml)" >> $GITHUB_ENV
-      - name: Run Maven Build
-        run: |
-          jf mvn --batch-mode versions:set -DnewVersion=${PROJECT_VERSION}
-          jf mvn -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.lf4jMavenTransferListener=warn -Ddependencycheck.skip=true --batch-mode clean package install --build-name ${PROJECT_ARTIFACT} --build-number ${PROJECT_VERSION}
-      - name: Installing jq command
-        run: |
-          curl -s -L -o /usr/bin/jq https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64
-          chmod +x /usr/bin/jq
-          jq --version
-        shell: bash
-      - name: SonarQube Scan
-        uses: sonarsource/sonarqube-scan-action@v2.0.0
-        env:
-          SONAR_HOST_URL: 'http://sonar.kroger.com/sonar'
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      - name: SonarQube Quality Gate check
-        id: sonarqube-quality-gate-check
-        uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
-        # Force to fail step after specific time.
-        timeout-minutes: 5
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: 'http://sonar.kroger.com/sonar'
-
   maven-build-metrics:
     name: Maven Test and Build (pos-utils-common-metrics)
-    needs: [sonar-scan]
-    runs-on: [ self-hosted, kubernetes, on-prem ]
+    runs-on: [ ubuntu-latest ]
     container:
       image: krogertechnology-docker.jfrog.io/library/maven:3.8.5-openjdk-17
       credentials:

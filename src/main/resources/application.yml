@@ -3,12 +3,10 @@ management:
     web:
       base-path: "/actuator"
       exposure:
-        include: health, metrics
+        include: health
   endpoint:
     prometheus:
-      enabled: false
-    metrics:
-      enabled: true
+      enabled: false      # IMPORTANT: Disable to use our /metrics endpoint
     health:
       enabled: true
 
