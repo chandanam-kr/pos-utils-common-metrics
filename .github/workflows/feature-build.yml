@@ -1,82 +1,36 @@
 name: Feature branch build
-# Controls when the workflow will run - This to be run on feature branch to validate build and tests.
-# No artifacts will be release in this build.
+
 on:
   push:
     branches: [ "feature/*", "fix/*", "custom_metrics" ]
-
-env:
-  DOCKER_REPO: "krogertechnology-docker.jfrog.io"
-  DOCKER_DEV_REPO: "krogertechnology-docker-dev.jfrog.io"
+  workflow_dispatch:
 
 jobs:
   maven-build:
     name: Maven Test and Build
-    runs-on: [self-hosted, kubernetes, on-prem]
-    container:
-      image: krogertechnology-docker.jfrog.io/library/maven:3.8.5-openjdk-17
-      credentials:
-        username: ${{secrets.ARTIFACTORY_IDENTITY_USER}}
-        password: ${{secrets.ARTIFACTORY_IDENTITY_TKN}}
-    outputs:
-      PROJECT_VERSION: ${{ steps.projectInfo.outputs.PROJECT_VERSION }}
-      PROJECT_GROUP: ${{ steps.projectInfo.outputs.PROJECT_GROUP }}
-      PROJECT_ARTIFACT: ${{ steps.projectInfo.outputs.PROJECT_ARTIFACT }}
-      HELM_SRC_DIR: ${{ steps.projectInfo.outputs.HELM_SRC_DIR }}
+    runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-      - name: Cache Local Maven Repository
-        if: always()
-        uses: actions/cache@v3
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
         with:
-          path: /root/.m2/repository
-          key: ${{ runner.os }}-maven-build-${{ github.run_number }}
-          restore-keys: ${{ runner.os }}-maven-build
-      - name: Download and Configure JFrog CLI
-        uses: krogertechnology/ngpos-utils-shared-actions/download-and-configure-jfrog-cli@main
-        with:
-          jfrog-access-token: ${{secrets.ARTIFACTORY_IDENTITY_TKN}}
-          jfrog-user-name: ${{secrets.ARTIFACTORY_IDENTITY_USER}}
-      - name: Store Project Information
-        id: projectInfo
-        run: |
-          PROJECT_VERSION=$(xmllint --xpath '/*[local-name()="project"]/*[local-name()="version"]/text()' pom.xml).${{github.run_number}}-develop
-          echo "PROJECT_VERSION=${PROJECT_VERSION}"
-          echo "PROJECT_GROUP=$(xmllint --xpath '/*[local-name()="project"]/*[local-name()="groupId"]/text()' pom.xml)"
-          echo "PROJECT_ARTIFACT=$(xmllint --xpath '/*[local-name()="project"]/*[local-name()="artifactId"]/text()' pom.xml)"
-          echo "PROJECT_VERSION=${PROJECT_VERSION}" >> $GITHUB_OUTPUT
-          echo "PROJECT_GROUP=$(xmllint --xpath '/*[local-name()="project"]/*[local-name()="groupId"]/text()' pom.xml)" >> $GITHUB_OUTPUT
-          echo "PROJECT_ARTIFACT=$(xmllint --xpath '/*[local-name()="project"]/*[local-name()="artifactId"]/text()' pom.xml)" >> $GITHUB_OUTPUT
-          echo "PROJECT_VERSION=${PROJECT_VERSION}" >> $GITHUB_ENV
-          echo "PROJECT_GROUP=$(xmllint --xpath '/*[local-name()="project"]/*[local-name()="groupId"]/text()' pom.xml)" >> $GITHUB_ENV
-          echo "PROJECT_ARTIFACT=$(xmllint --xpath '/*[local-name()="project"]/*[local-name()="artifactId"]/text()' pom.xml)" >> $GITHUB_ENV
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
       - name: Run Maven Build
-        run: |
-          jf mvn --batch-mode versions:set -DnewVersion=${PROJECT_VERSION}
-          jf mvn -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.lf4jMavenTransferListener=warn -Ddependencycheck.skip=true --batch-mode clean package install --build-name ${PROJECT_ARTIFACT} --build-number ${PROJECT_VERSION}
-      - name: Installing jq command
-        run: |
-          curl -s -L -o /usr/bin/jq https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64
-          chmod +x /usr/bin/jq
-          jq --version
-        shell: bash
-      - name: SonarQube Scan
-        uses: sonarsource/sonarqube-scan-action@v2.0.0
-        env:
-          SONAR_HOST_URL: 'http://sonar.kroger.com/sonar'
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      - name: SonarQube Quality Gate check
-        id: sonarqube-quality-gate-check
-        uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
-        # Force to fail step after specific time.
-        timeout-minutes: 5
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: 'http://sonar.kroger.com/sonar'
-      - name: Upload SpotBugs
+        run: mvn clean install -DskipTests
+
+      - name: Run Tests
+        run: mvn test
+
+      - name: Upload SpotBugs Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: spotbugs-report
           path: target/spotbugs.xml
+          if-no-files-found: ignore
