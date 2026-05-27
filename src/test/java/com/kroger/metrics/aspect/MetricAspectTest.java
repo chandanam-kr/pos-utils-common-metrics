@@ -2,6 +2,7 @@ package com.kroger.metrics.aspect;
 
 import com.kroger.metrics.annotation.Metric;
 import com.kroger.metrics.annotation.MetricType;
+import com.kroger.metrics.aspect.MetricAspect;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
