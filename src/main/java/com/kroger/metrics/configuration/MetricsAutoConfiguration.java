@@ -14,22 +14,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
 
-/**
- * Auto configuration for the metrics library.
- *
- * Disable via application.yml:
- *   metrics:
- *     enabled: false
- *
- * When disabled, MetricService still available as NoOp
- * to prevent injection failures in user code.
- */
 @AutoConfiguration
 @ConditionalOnClass({MeterRegistry.class, PrometheusMeterRegistry.class})
 public class MetricsAutoConfiguration
 {
-    // ── Beans only when metrics.enabled=true ───────────────────────
-
     @Bean
     @ConditionalOnProperty(name = "metrics.enabled", havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(MetricAspect.class)
@@ -50,12 +38,11 @@ public class MetricsAutoConfiguration
     @Bean
     @ConditionalOnProperty(name = "metrics.enabled", havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(MetricsController.class)
-    public MetricsController metricsController(PrometheusMeterRegistry registry)
+    public MetricsController metricsController(PrometheusMeterRegistry registry,
+                                               MetricsConfiguration metricsConfig)
     {
-        return new MetricsController(registry);
+        return new MetricsController(registry, metricsConfig);
     }
-
-    // ── MetricService - ALWAYS available ───────────────────────────
 
     @Bean
     @ConditionalOnProperty(name = "metrics.enabled", havingValue = "true", matchIfMissing = true)
@@ -72,8 +59,6 @@ public class MetricsAutoConfiguration
     {
         return new NoOpMetricService();
     }
-
-    // ── EnableAspectJAutoProxy only when enabled ───────────────────
 
     @EnableAspectJAutoProxy
     @ConditionalOnProperty(name = "metrics.enabled", havingValue = "true", matchIfMissing = true)

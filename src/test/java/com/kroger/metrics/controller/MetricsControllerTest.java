@@ -1,8 +1,8 @@
 package com.kroger.metrics.controller;
 
+import com.kroger.metrics.configuration.MetricsConfiguration;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -11,22 +11,26 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
+import java.util.List;
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("MetricsController Tests")
 class MetricsControllerTest
 {
     @Mock
     private PrometheusMeterRegistry registry;
 
+    private MetricsConfiguration metricsConfig;
     private MetricsController controller;
 
     @BeforeEach
     void setUp()
     {
-        controller = new MetricsController(registry);
+        metricsConfig = new MetricsConfiguration();
+        controller = new MetricsController(registry, metricsConfig);
     }
 
     @Nested
@@ -67,8 +71,7 @@ class MetricsControllerTest
         @Test
         void shouldFilterCommentLines()
         {
-            when(registry.scrape()).thenReturn("# HELP jvm_memory_used_bytes\n" +
-                    "# TYPE jvm_memory_used_bytes gauge\n");
+            when(registry.scrape()).thenReturn("# HELP jvm_memory_used_bytes\n" + "# TYPE jvm_memory_used_bytes gauge\n");
 
             ResponseEntity<String> response = controller.metrics();
 
@@ -87,137 +90,15 @@ class MetricsControllerTest
     }
 
     @Nested
-    class MetricRenamingTests
+    class TypeTagFromCategoriesTests
     {
         @Test
-        void shouldRenameHttpRequestsCount()
+        void shouldAddTypeFromSimpleCategory()
         {
-            when(registry.scrape()).thenReturn(
-                    "http_server_requests_seconds_count{method=\"GET\"} 5.0\n"
-            );
+            metricsConfig.setCategories(List.of("http"));
+            metricsConfig.init();
 
-            ResponseEntity<String> response = controller.metrics();
-
-            assertThat(response.getBody()).contains("total_requests_completed");
-            assertThat(response.getBody()).doesNotContain("http_server_requests_seconds_count");
-        }
-
-        @Test
-        void shouldRenameJvmMemory()
-        {
-            when(registry.scrape()).thenReturn(
-                    "jvm_memory_used_bytes{area=\"heap\"} 1024\n"
-            );
-
-            ResponseEntity<String> response = controller.metrics();
-
-            assertThat(response.getBody()).contains("memory_currently_used_bytes");
-            assertThat(response.getBody()).doesNotContain("jvm_memory_used_bytes{");
-        }
-
-        @Test
-        void shouldLeaveUnknownMetricUnchanged()
-        {
-            when(registry.scrape()).thenReturn(
-                    "custom_business_metric_total{env=\"prod\"} 42\n"
-            );
-
-            ResponseEntity<String> response = controller.metrics();
-
-            assertThat(response.getBody()).contains("custom_business_metric_total");
-        }
-
-        @Test
-        void shouldRenameMetricWithoutTags()
-        {
-            when(registry.scrape()).thenReturn(
-                    "jvm_threads_live_threads 10\n"
-            );
-
-            ResponseEntity<String> response = controller.metrics();
-
-            assertThat(response.getBody()).contains("threads_currently_active");
-        }
-    }
-
-    @Nested
-    class TagValueRenamingTests
-    {
-        @Test
-        void shouldRenameSuccessTagValue()
-        {
-            when(registry.scrape()).thenReturn(
-                    "http_server_requests_seconds_count{outcome=\"SUCCESS\"} 10\n");
-
-            ResponseEntity<String> response = controller.metrics();
-
-            assertThat(response.getBody()).contains("success_2xx");
-            assertThat(response.getBody()).doesNotContain("=\"SUCCESS\"");
-        }
-
-        @Test
-        void shouldRenameClientErrorTagValue()
-        {
-            when(registry.scrape()).thenReturn(
-                    "http_server_requests_seconds_count{outcome=\"CLIENT_ERROR\"} 3\n");
-
-            ResponseEntity<String> response = controller.metrics();
-
-            assertThat(response.getBody()).contains("client_error_4xx");
-        }
-
-        @Test
-        void shouldRenameServerErrorTagValue()
-        {
-            when(registry.scrape()).thenReturn(
-                    "http_server_requests_seconds_count{outcome=\"SERVER_ERROR\"} 1\n");
-
-            ResponseEntity<String> response = controller.metrics();
-
-            assertThat(response.getBody()).contains("server_error_5xx");
-        }
-
-        @Test
-        void shouldRenameMetaspaceTagValue()
-        {
-            when(registry.scrape()).thenReturn(
-                    "jvm_memory_used_bytes{id=\"Metaspace\"} 2048\n");
-
-            ResponseEntity<String> response = controller.metrics();
-
-            assertThat(response.getBody()).contains("nonheap_metaspace");
-        }
-
-        @Test
-        void shouldRenameRunnableThreadState()
-        {
-            when(registry.scrape()).thenReturn(
-                    "jvm_threads_states_threads{state=\"runnable\"} 4\n");
-
-            ResponseEntity<String> response = controller.metrics();
-
-            assertThat(response.getBody()).contains("actively_running");
-        }
-
-        @Test
-        void shouldLeaveUnknownTagValueUnchanged()
-        {
-            when(registry.scrape()).thenReturn("custom_metric{env=\"production\"} 1\n");
-
-            ResponseEntity<String> response = controller.metrics();
-
-            assertThat(response.getBody()).contains("=\"production\"");
-        }
-    }
-
-    @Nested
-    class TypeAndTimestampEnrichmentTests
-    {
-        @Test
-        void shouldAddTypeTagToLineWithTags()
-        {
-            when(registry.scrape()).thenReturn(
-                    "http_server_requests_seconds_count{method=\"GET\"} 5\n");
+            when(registry.scrape()).thenReturn("http_server_requests_seconds_count{method=\"GET\"} 5\n");
 
             ResponseEntity<String> response = controller.metrics();
 
@@ -225,28 +106,24 @@ class MetricsControllerTest
         }
 
         @Test
-        void shouldAddTimestampTagToLine()
+        void shouldAddTypeFromCustomCategory()
         {
-            when(registry.scrape()).thenReturn("http_server_requests_seconds_count{method=\"GET\"} 5\n");
+            metricsConfig.setCustomCategories(Map.of("business-day-service", List.of("ISA")));
+            metricsConfig.init();
+
+            when(registry.scrape()).thenReturn("ISA_BUSINESS_DAY_LIST_total{dltId=\"123\"} 1\n");
 
             ResponseEntity<String> response = controller.metrics();
 
-            assertThat(response.getBody()).contains("timestamp=\"");
+            assertThat(response.getBody()).contains("type=\"business-day-service\"");
         }
 
         @Test
-        void shouldUseCustomTypeForUnknownMetric()
+        void shouldAddJvmTypeWhenJvmConfigured()
         {
-            when(registry.scrape()).thenReturn("my_business_metric_total{env=\"prod\"} 1\n");
+            metricsConfig.setCategories(List.of("jvm"));
+            metricsConfig.init();
 
-            ResponseEntity<String> response = controller.metrics();
-
-            assertThat(response.getBody()).contains("type=\"custom\"");
-        }
-
-        @Test
-        void shouldAddJvmTypeForJvmMetrics()
-        {
             when(registry.scrape()).thenReturn(
                     "jvm_memory_used_bytes{area=\"heap\"} 1024\n");
 
@@ -256,27 +133,113 @@ class MetricsControllerTest
         }
 
         @Test
-        void shouldAddProcessTypeForProcessMetric()
+        void shouldFallbackToFirstSegmentWhenNoCategoryMatches()
+        {
+            when(registry.scrape()).thenReturn(
+                    "my_business_metric_total{env=\"prod\"} 1\n");
+
+            ResponseEntity<String> response = controller.metrics();
+
+            assertThat(response.getBody()).contains("type=\"my\"");
+        }
+
+        @Test
+        void shouldFallbackToCustomForSingleTokenMetric()
+        {
+            when(registry.scrape()).thenReturn("singletoken 1\n");
+
+            ResponseEntity<String> response = controller.metrics();
+
+            assertThat(response.getBody()).contains("type=\"custom\"");
+        }
+
+        @Test
+        void shouldPreferCustomCategoryOverSimpleCategory()
+        {
+            metricsConfig.setCategories(List.of("jvm"));
+            metricsConfig.setCustomCategories(Map.of("runtime", List.of("jvm.memory")));
+            metricsConfig.init();
+
+            when(registry.scrape()).thenReturn(
+                    "jvm_memory_used_bytes{area=\"heap\"} 1024\n");
+
+            ResponseEntity<String> response = controller.metrics();
+
+            assertThat(response.getBody()).contains("type=\"runtime\"");
+        }
+    }
+
+    @Nested
+    class TimestampEnrichmentTests
+    {
+        @Test
+        void shouldAddTimestampTagToLine()
+        {
+            when(registry.scrape()).thenReturn(
+                    "http_server_requests_seconds_count{method=\"GET\"} 5\n");
+
+            ResponseEntity<String> response = controller.metrics();
+
+            assertThat(response.getBody()).contains("timestamp=\"");
+        }
+
+        @Test
+        void shouldAddTimestampToLineWithoutTags()
         {
             when(registry.scrape()).thenReturn("process_cpu_usage 0.05\n");
 
             ResponseEntity<String> response = controller.metrics();
 
-            assertThat(response.getBody()).contains("type=\"process\"");
+            assertThat(response.getBody()).contains("timestamp=\"");
         }
 
         @Test
-        void shouldAddLoggingTypeForLogback()
+        void shouldHaveSameTimestampForAllLinesInOneScrape()
         {
-            when(registry.scrape()).thenReturn("logback_events_total{level=\"info\"} 100\n");
+            when(registry.scrape()).thenReturn(
+                    "metric_a{x=\"1\"} 1\nmetric_b{x=\"2\"} 2\n");
 
             ResponseEntity<String> response = controller.metrics();
 
-            assertThat(response.getBody()).contains("type=\"logging\"");
+            String body = response.getBody();
+            String[] lines = body.split("\n");
+            String firstTimestamp = extractTimestamp(lines[0]);
+            String secondTimestamp = extractTimestamp(lines[1]);
+
+            assertThat(firstTimestamp).isEqualTo(secondTimestamp);
+        }
+
+        private String extractTimestamp(String line)
+        {
+            int start = line.indexOf("timestamp=\"") + "timestamp=\"".length();
+            int end = line.indexOf("\"", start);
+            return line.substring(start, end);
+        }
+    }
+
+    @Nested
+    class TagInjectionTests
+    {
+        @Test
+        void shouldInjectTagsIntoExistingTagBlock()
+        {
+            metricsConfig.setCategories(List.of("jvm"));
+            metricsConfig.init();
+
+            when(registry.scrape()).thenReturn(
+                    "jvm_threads_live_threads{area=\"heap\"} 10\n");
+
+            ResponseEntity<String> response = controller.metrics();
+
+            String body = response.getBody();
+            assertThat(body).contains("area=\"heap\"");
+            assertThat(body).contains("type=\"jvm\"");
+            assertThat(body).contains("timestamp=\"");
+            assertThat(body).containsPattern("\\}\\s+10");
         }
 
         @Test
-        void shouldHandleLineWithoutBraces()
+        void shouldCreateNewTagBlockForLineWithoutTags()
         {
             when(registry.scrape()).thenReturn("process_cpu_usage 0.05\n");
 
@@ -284,20 +247,26 @@ class MetricsControllerTest
 
             String body = response.getBody();
             assertThat(body).contains("{");
+            assertThat(body).contains("}");
             assertThat(body).contains("timestamp=\"");
             assertThat(body).contains("type=\"process\"");
         }
 
         @Test
-        void shouldInjectBeforeClosingBrace()
+        void shouldPreserveOriginalTagsWhenInjecting()
         {
+            metricsConfig.setCategories(List.of("http"));
+            metricsConfig.init();
+
             when(registry.scrape()).thenReturn(
-                    "jvm_threads_live_threads{area=\"heap\"} 10\n");
+                    "http_server_requests_seconds_count{method=\"GET\",status=\"200\"} 42\n");
 
             ResponseEntity<String> response = controller.metrics();
 
             String body = response.getBody();
-            assertThat(body).containsPattern("\\}\\s+10");
+            assertThat(body).contains("method=\"GET\"");
+            assertThat(body).contains("status=\"200\"");
+            assertThat(body).contains("type=\"http\"");
         }
     }
 
@@ -307,6 +276,9 @@ class MetricsControllerTest
         @Test
         void shouldApplyAllTransformations()
         {
+            metricsConfig.setCategories(List.of("http"));
+            metricsConfig.init();
+
             when(registry.scrape()).thenReturn(
                     "# HELP http_server_requests_seconds_count Total requests\n" +
                             "http_server_requests_seconds_count{outcome=\"SUCCESS\"} 42\n");
@@ -315,8 +287,8 @@ class MetricsControllerTest
 
             String body = response.getBody();
             assertThat(body).doesNotContain("# HELP");
-            assertThat(body).contains("total_requests_completed");
-            assertThat(body).contains("success_2xx");
+            assertThat(body).contains("http_server_requests_seconds_count");
+            assertThat(body).contains("outcome=\"SUCCESS\"");
             assertThat(body).contains("type=\"http\"");
             assertThat(body).contains("timestamp=\"");
         }
@@ -324,7 +296,8 @@ class MetricsControllerTest
         @Test
         void shouldProduceOneLinePerValidLine()
         {
-            when(registry.scrape()).thenReturn("# comment\n" + "metric_a{x=\"1\"} 1\n" +
+            when(registry.scrape()).thenReturn(
+                    "# comment\n" + "metric_a{x=\"1\"} 1\n" +
                             "\n" + "metric_b{x=\"2\"} 2\n");
 
             ResponseEntity<String> response = controller.metrics();
@@ -332,6 +305,37 @@ class MetricsControllerTest
             String[] lines = response.getBody().split("\n");
             assertThat(lines).hasSize(2);
         }
+
+        @Test
+        void shouldHandleMixedMetricFormats()
+        {
+            metricsConfig.setCategories(List.of("jvm", "process"));
+            metricsConfig.init();
+
+            when(registry.scrape()).thenReturn(
+                    "jvm_memory_used_bytes{area=\"heap\"} 1024\n" +
+                            "process_cpu_usage 0.05\n");
+
+            ResponseEntity<String> response = controller.metrics();
+
+            String body = response.getBody();
+            assertThat(body).contains("type=\"jvm\"");
+            assertThat(body).contains("type=\"process\"");
+            assertThat(body).contains("timestamp=\"");
+        }
+
+        @Test
+        void shouldHandleEmptyCustomCategoriesGracefully()
+        {
+            metricsConfig.init();
+
+            when(registry.scrape()).thenReturn(
+                    "jvm_memory_used_bytes{area=\"heap\"} 1024\n");
+
+            ResponseEntity<String> response = controller.metrics();
+
+            assertThat(response.getBody()).contains("type=\"jvm\"");
+            assertThat(response.getBody()).contains("timestamp=\"");
+        }
     }
 }
-

@@ -1,17 +1,21 @@
 package com.kroger.metrics.configuration;
 
 import io.micrometer.core.instrument.Meter;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.config.MeterFilter;
 import io.micrometer.core.instrument.config.MeterFilterReply;
+import io.micrometer.prometheusmetrics.PrometheusConfig;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.micrometer.metrics.autoconfigure.MeterRegistryCustomizer;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -28,56 +32,157 @@ class MetricsConfigurationTest
     }
 
     @Nested
-    class AdditionalPrefixesTests
+    class CategoriesTests
     {
         @Test
         void shouldReturnEmptyListByDefault()
         {
-            assertThat(metricsConfiguration.getAdditionalPrefixes()).isEmpty();
+            assertThat(metricsConfiguration.getCategories()).isEmpty();
         }
 
         @Test
-        void shouldStoreAndReturnPrefixes()
+        void shouldStoreAndReturnCategories()
         {
-            metricsConfiguration.setAdditionalPrefixes(List.of("business", "custom"));
+            metricsConfiguration.setCategories(List.of("http", "jvm"));
 
-            assertThat(metricsConfiguration.getAdditionalPrefixes())
-                    .containsExactly("business", "custom");
+            assertThat(metricsConfiguration.getCategories())
+                    .containsExactly("http", "jvm");
         }
 
         @Test
-        void shouldReplacePrefixesOnSet()
+        void shouldReplaceCategoriesOnSet()
         {
-            metricsConfiguration.setAdditionalPrefixes(List.of("old"));
-            metricsConfiguration.setAdditionalPrefixes(List.of("new.prefix"));
+            metricsConfiguration.setCategories(List.of("old"));
+            metricsConfiguration.setCategories(List.of("http", "system"));
 
-            assertThat(metricsConfiguration.getAdditionalPrefixes())
-                    .containsExactly("new.prefix");
-        }
-
-        @Test
-        void shouldUseEmptyListWhenNullSet()
-        {
-            metricsConfiguration.setAdditionalPrefixes(null);
-
-            assertThat(metricsConfiguration.getAdditionalPrefixes()).isEmpty();
+            assertThat(metricsConfiguration.getCategories())
+                    .containsExactly("http", "system");
         }
     }
 
     @Nested
-    class LogConfigTests
+    class CustomCategoriesTests
     {
         @Test
-        void shouldNotThrow()
+        void shouldReturnEmptyMapByDefault()
         {
-            metricsConfiguration.setAdditionalPrefixes(List.of("business"));
-            assertDoesNotThrow(() -> metricsConfiguration.logConfig());
+            assertThat(metricsConfiguration.getCustomCategories()).isEmpty();
         }
 
         @Test
-        void shouldNotThrowWithEmptyPrefixes()
+        void shouldStoreAndReturnCustomCategories()
         {
-            assertDoesNotThrow(() -> metricsConfiguration.logConfig());
+            metricsConfiguration.setCustomCategories(Map.of(
+                    "business-day-service", List.of("ISA")));
+
+            assertThat(metricsConfiguration.getCustomCategories())
+                    .containsEntry("business-day-service", List.of("ISA"));
+        }
+
+        @Test
+        void shouldReplaceCustomCategoriesOnSet()
+        {
+            metricsConfiguration.setCustomCategories(Map.of("old", List.of("oldPrefix")));
+            metricsConfiguration.setCustomCategories(Map.of("new", List.of("new.prefix")));
+
+            assertThat(metricsConfiguration.getCustomCategories())
+                    .containsOnlyKeys("new")
+                    .containsEntry("new", List.of("new.prefix"));
+        }
+    }
+
+    @Nested
+    class InitTests
+    {
+        @Test
+        void shouldNotThrowWithEmptyConfig()
+        {
+            assertDoesNotThrow(() -> metricsConfiguration.init());
+        }
+
+        @Test
+        void shouldNotThrowWithCategoriesOnly()
+        {
+            metricsConfiguration.setCategories(List.of("http", "jvm"));
+            assertDoesNotThrow(() -> metricsConfiguration.init());
+        }
+
+        @Test
+        void shouldNotThrowWithCustomCategoriesOnly()
+        {
+            metricsConfiguration.setCustomCategories(Map.of("business", List.of("ISA")));
+            assertDoesNotThrow(() -> metricsConfiguration.init());
+        }
+
+        @Test
+        void shouldNotThrowInUnfilteredMode()
+        {
+            metricsConfiguration.setUnfiltered(true);
+            assertDoesNotThrow(() -> metricsConfiguration.init());
+        }
+
+        @Test
+        void shouldPopulateEffectivePrefixesFromCategories()
+        {
+            metricsConfiguration.setCategories(List.of("http", "jvm"));
+            metricsConfiguration.init();
+
+            assertThat(metricsConfiguration.getEffectivePrefixes())
+                    .containsExactlyInAnyOrder("http", "jvm");
+        }
+
+        @Test
+        void shouldPopulateEffectivePrefixesFromCustomCategories()
+        {
+            metricsConfiguration.setCustomCategories(Map.of(
+                    "business", List.of("ISA", "orders")));
+            metricsConfiguration.init();
+
+            assertThat(metricsConfiguration.getEffectivePrefixes())
+                    .containsExactlyInAnyOrder("ISA", "orders");
+        }
+
+        @Test
+        void shouldMergeCategoriesAndCustomCategories()
+        {
+            metricsConfiguration.setCategories(List.of("http", "jvm"));
+            metricsConfiguration.setCustomCategories(Map.of("business", List.of("ISA")));
+            metricsConfiguration.init();
+
+            assertThat(metricsConfiguration.getEffectivePrefixes())
+                    .containsExactlyInAnyOrder("http", "jvm", "ISA");
+        }
+
+        @Test
+        void shouldGiveCustomCategoriesPrecedenceOverSimpleCategories()
+        {
+            metricsConfiguration.setCategories(List.of("jvm"));
+            metricsConfiguration.setCustomCategories(Map.of("jvm", List.of("jvm.memory")));
+            metricsConfiguration.init();
+
+            assertThat(metricsConfiguration.getEffectivePrefixes())
+                    .containsExactly("jvm.memory");
+        }
+
+        @Test
+        void shouldSkipCustomCategoryWithEmptyPrefixes()
+        {
+            metricsConfiguration.setCustomCategories(Map.of("empty", List.of()));
+            metricsConfiguration.init();
+
+            assertThat(metricsConfiguration.getEffectivePrefixes()).isEmpty();
+        }
+
+        @Test
+        void shouldBuildPrefixToCategoryMap()
+        {
+            metricsConfiguration.setCategories(List.of("http"));
+            metricsConfiguration.setCustomCategories(Map.of("business", List.of("ISA")));
+            metricsConfiguration.init();
+
+            assertThat(metricsConfiguration.getPrefixToCategory())
+                    .containsEntry("http", "http")
+                    .containsEntry("ISA", "business");
         }
     }
 
@@ -93,26 +198,10 @@ class MetricsConfigurationTest
         }
 
         @Test
-        void shouldAllowJvmMemoryMetric()
+        void shouldAllowMetricMatchingSimpleCategory()
         {
-            MeterFilter filter = metricsConfiguration.meterFilter();
-
-            assertThat(filter.accept(meterId("jvm.memory.used")))
-                    .isEqualTo(MeterFilterReply.NEUTRAL);
-        }
-
-        @Test
-        void shouldAllowJvmThreadsMetric()
-        {
-            MeterFilter filter = metricsConfiguration.meterFilter();
-
-            assertThat(filter.accept(meterId("jvm.threads.live")))
-                    .isEqualTo(MeterFilterReply.NEUTRAL);
-        }
-
-        @Test
-        void shouldAllowHttpServerMetric()
-        {
+            metricsConfiguration.setCategories(List.of("http"));
+            metricsConfiguration.init();
             MeterFilter filter = metricsConfiguration.meterFilter();
 
             assertThat(filter.accept(meterId("http.server.requests")))
@@ -120,87 +209,95 @@ class MetricsConfigurationTest
         }
 
         @Test
-        void shouldAllowProcessCpuMetric()
+        void shouldAllowMetricMatchingCustomCategoryPrefix()
         {
+            metricsConfiguration.setCustomCategories(Map.of("business", List.of("ISA")));
+            metricsConfiguration.init();
             MeterFilter filter = metricsConfiguration.meterFilter();
 
-            assertThat(filter.accept(meterId("process.cpu.usage")))
+            assertThat(filter.accept(meterId("ISA.business.day.list")))
                     .isEqualTo(MeterFilterReply.NEUTRAL);
         }
 
         @Test
-        void shouldAllowSystemCpuMetric()
+        void shouldAllowJvmMetricWhenJvmConfigured()
         {
+            metricsConfiguration.setCategories(List.of("jvm"));
+            metricsConfiguration.init();
             MeterFilter filter = metricsConfiguration.meterFilter();
 
-            assertThat(filter.accept(meterId("system.cpu.count")))
+            assertThat(filter.accept(meterId("jvm.memory.used")))
                     .isEqualTo(MeterFilterReply.NEUTRAL);
         }
 
         @Test
-        void shouldAllowLogbackMetric()
+        void shouldDenyMetricNotMatchingAnyCategory()
         {
+            metricsConfiguration.setCategories(List.of("http"));
+            metricsConfiguration.init();
             MeterFilter filter = metricsConfiguration.meterFilter();
 
-            assertThat(filter.accept(meterId("logback.events")))
-                    .isEqualTo(MeterFilterReply.NEUTRAL);
-        }
-
-        @Test
-        void shouldDenyUnknownMetric()
-        {
-            MeterFilter filter = metricsConfiguration.meterFilter();
-
-            assertThat(filter.accept(meterId("not.allowed.metric")))
+            assertThat(filter.accept(meterId("jvm.memory.used")))
                     .isEqualTo(MeterFilterReply.DENY);
         }
 
         @Test
-        void shouldAllowAdditionalPrefixMetric()
+        void shouldDenyAllMetricsWhenNoCategoriesConfigured()
         {
-            metricsConfiguration.setAdditionalPrefixes(List.of("business.day"));
+            metricsConfiguration.init();
             MeterFilter filter = metricsConfiguration.meterFilter();
 
-            assertThat(filter.accept(meterId("business.day.requests_total")))
+            assertThat(filter.accept(meterId("jvm.memory.used")))
+                    .isEqualTo(MeterFilterReply.DENY);
+            assertThat(filter.accept(meterId("http.server.requests")))
+                    .isEqualTo(MeterFilterReply.DENY);
+        }
+
+        @Test
+        void shouldAllowAllMetricsInUnfilteredMode()
+        {
+            metricsConfiguration.setUnfiltered(true);
+            metricsConfiguration.init();
+            MeterFilter filter = metricsConfiguration.meterFilter();
+
+            assertThat(filter.accept(meterId("anything.at.all")))
+                    .isEqualTo(MeterFilterReply.NEUTRAL);
+            assertThat(filter.accept(meterId("random.metric")))
                     .isEqualTo(MeterFilterReply.NEUTRAL);
         }
 
         @Test
-        void shouldDenyMetricNotMatchingAdditionalPrefix()
+        void shouldDenyBlankMetricName()
         {
-            metricsConfiguration.setAdditionalPrefixes(List.of("business.day"));
+            metricsConfiguration.setCategories(List.of("http"));
+            metricsConfiguration.init();
             MeterFilter filter = metricsConfiguration.meterFilter();
 
-            assertThat(filter.accept(meterId("other.service.metric")))
-                    .isEqualTo(MeterFilterReply.DENY);
+            Meter.Id id = new Meter.Id("", Tags.empty(), null, null, Meter.Type.COUNTER);
+            assertThat(filter.accept(id)).isEqualTo(MeterFilterReply.DENY);
         }
 
         @Test
         void shouldAllowMetricMatchingOneOfMultiplePrefixes()
         {
-            metricsConfiguration.setAdditionalPrefixes(List.of("business.day", "store.ops"));
+            metricsConfiguration.setCustomCategories(Map.of(
+                    "business", List.of("ISA", "orders", "payments")));
+            metricsConfiguration.init();
             MeterFilter filter = metricsConfiguration.meterFilter();
 
-            assertThat(filter.accept(meterId("store.ops.inventory_total")))
+            assertThat(filter.accept(meterId("payments.gateway.charge")))
                     .isEqualTo(MeterFilterReply.NEUTRAL);
         }
 
         @Test
-        void shouldReturnDenyForBlankMetricName()
+        void shouldDenyMetricNotMatchingAnyPrefix()
         {
+            metricsConfiguration.setCustomCategories(Map.of("business", List.of("ISA")));
+            metricsConfiguration.init();
             MeterFilter filter = metricsConfiguration.meterFilter();
-            Meter.Id id = new Meter.Id("", Tags.empty(), null, null, Meter.Type.COUNTER);
 
-            assertThat(filter.accept(id)).isEqualTo(MeterFilterReply.DENY);
-        }
-
-        @Test
-        void shouldReturnNeutralWhenFilterThrowsInternally()
-        {
-            MeterFilter filter = metricsConfiguration.meterFilter();
-            Meter.Id id = new Meter.Id("unknown.metric", Tags.empty(), null, null, Meter.Type.COUNTER);
-
-            assertThat(filter.accept(id)).isEqualTo(MeterFilterReply.DENY);
+            assertThat(filter.accept(meterId("other.service.metric")))
+                    .isEqualTo(MeterFilterReply.DENY);
         }
 
         private Meter.Id meterId(String name)
@@ -208,5 +305,114 @@ class MetricsConfigurationTest
             return new Meter.Id(name, Tags.empty(), null, null, Meter.Type.COUNTER);
         }
     }
-}
 
+    @Nested
+    class CommonTagsCustomizerTests
+    {
+        @Test
+        void shouldReturnNonNullCustomizer()
+        {
+            MeterRegistryCustomizer<MeterRegistry> customizer =
+                    metricsConfiguration.commonTagsCustomizer("isa-service");
+
+            assertThat(customizer).isNotNull();
+        }
+
+        @Test
+        void shouldAddAppTagWithProvidedName()
+        {
+            MeterRegistryCustomizer<MeterRegistry> customizer =
+                    metricsConfiguration.commonTagsCustomizer("isa-service");
+            PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+
+            customizer.customize(registry);
+            registry.counter("test.counter").increment();
+
+            assertThat(registry.scrape()).contains("app=\"isa-service\"");
+        }
+
+        @Test
+        void shouldDefaultToUnknownWhenAppNameIsNull()
+        {
+            MeterRegistryCustomizer<MeterRegistry> customizer =
+                    metricsConfiguration.commonTagsCustomizer(null);
+            PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+
+            customizer.customize(registry);
+            registry.counter("test.counter").increment();
+
+            assertThat(registry.scrape()).contains("app=\"unknown\"");
+        }
+
+        @Test
+        void shouldDefaultToUnknownWhenAppNameIsBlank()
+        {
+            MeterRegistryCustomizer<MeterRegistry> customizer =
+                    metricsConfiguration.commonTagsCustomizer("   ");
+            PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+
+            customizer.customize(registry);
+            registry.counter("test.counter").increment();
+
+            assertThat(registry.scrape()).contains("app=\"unknown\"");
+        }
+
+        @Test
+        void shouldDefaultToUnknownWhenAppNameIsEmpty()
+        {
+            MeterRegistryCustomizer<MeterRegistry> customizer =
+                    metricsConfiguration.commonTagsCustomizer("");
+            PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+
+            customizer.customize(registry);
+            registry.counter("test.counter").increment();
+
+            assertThat(registry.scrape()).contains("app=\"unknown\"");
+        }
+
+        @Test
+        void shouldApplyAppTagToAllMetrics()
+        {
+            MeterRegistryCustomizer<MeterRegistry> customizer =
+                    metricsConfiguration.commonTagsCustomizer("my-service");
+            PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+
+            customizer.customize(registry);
+            registry.counter("counter.one").increment();
+            registry.counter("counter.two").increment();
+
+            String scrape = registry.scrape();
+            assertThat(scrape).contains("counter_one_total{app=\"my-service\"");
+            assertThat(scrape).contains("counter_two_total{app=\"my-service\"");
+        }
+    }
+
+    @Nested
+    class UnfilteredModeTests
+    {
+        @Test
+        void shouldDefaultToFalse()
+        {
+            assertThat(metricsConfiguration.isUnfiltered()).isFalse();
+        }
+
+        @Test
+        void shouldStoreUnfilteredTrue()
+        {
+            metricsConfiguration.setUnfiltered(true);
+
+            assertThat(metricsConfiguration.isUnfiltered()).isTrue();
+        }
+
+        @Test
+        void shouldSkipPrefixComputationInUnfilteredMode()
+        {
+            metricsConfiguration.setUnfiltered(true);
+            metricsConfiguration.setCategories(List.of("http", "jvm"));
+            metricsConfiguration.init();
+
+            assertThat(metricsConfiguration.getEffectivePrefixes()).isEmpty();
+            assertThat(metricsConfiguration.getPrefixToCategory()).isEmpty();
+        }
+    }
+}

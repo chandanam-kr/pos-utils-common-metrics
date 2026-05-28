@@ -2,59 +2,94 @@ package com.kroger.metrics.configuration;
 
 import com.kroger.metrics.constants.MetricsConstants;
 import io.micrometer.core.instrument.Meter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.config.MeterFilter;
 import io.micrometer.core.instrument.config.MeterFilterReply;
 import jakarta.annotation.PostConstruct;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.micrometer.metrics.autoconfigure.MeterRegistryCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
-
-import static com.kroger.metrics.constants.MetricsConstants.DEFAULT_ALLOWED;
+import java.util.Map;
 
 /**
- * Configuration for Prometheus meter filtering.
- * Allows system metrics by default and lets user add business specific prefixes.
+ * Metric filtering + global tag injection driven by application.yml.
  */
 @Slf4j
+@Getter
+@Setter
 @Configuration
 @ConfigurationProperties(prefix = "metrics")
 public class MetricsConfiguration
 {
+    private static final String UNKNOWN = "unknown";
 
-    /**
-     * User defined business metric prefixes from application.yml.
-     */
-    private List<String> additionalPrefixes = new ArrayList<>();
+    //When true, all metrics pass through with no filtering.
+    private boolean unfiltered = false;
 
-    public List<String> getAdditionalPrefixes()
-    {
-        return additionalPrefixes;
-    }
+    //Simple categories — name acts as both prefix and type tag value.
+    private List<String> categories = new ArrayList<>();
 
-    public void setAdditionalPrefixes(List<String> additionalPrefixes)
-    {
-        this.additionalPrefixes = additionalPrefixes != null
-                ? additionalPrefixes
-                : new ArrayList<>();
-    }
+    //Categories with explicit prefix overrides.
+    private Map<String, List<String>> customCategories = new LinkedHashMap<>();
 
-    /**
-     * Logs loaded configuration at startup for debugging.
-     */
+    // Computed at startup
+    private List<String> effectivePrefixes        = new ArrayList<>();
+    private Map<String, String> prefixToCategory  = new LinkedHashMap<>();
+
     @PostConstruct
-    public void logConfig()
+    public void init()
     {
-        log.info(MetricsConstants.LOG_METRICS_FILTER_INIT, DEFAULT_ALLOWED, additionalPrefixes);
+        if (unfiltered)
+        {
+            log.debug(MetricsConstants.LOG_METRICS_UNFILTERED);
+            return;
+        }
+
+        customCategories.forEach((name, prefixes) -> {
+            if (prefixes == null || prefixes.isEmpty())
+            {
+                log.debug(MetricsConstants.LOG_CATEGORY_NO_PREFIXES, name);
+                return;
+            }
+            prefixes.forEach(p -> {
+                effectivePrefixes.add(p);
+                prefixToCategory.put(p, name);
+            });
+        });
+
+        categories.stream()
+                .filter(name -> !customCategories.containsKey(name))
+                .forEach(name -> {
+                    effectivePrefixes.add(name);
+                    prefixToCategory.put(name, name);
+                });
+
+        log.info(MetricsConstants.LOG_METRICS_FILTER_INIT,
+                allCategoryNames(), effectivePrefixes, customCategories.keySet());
+
+        if (effectivePrefixes.isEmpty())
+            log.debug(MetricsConstants.LOG_NO_PREFIXES_CONFIGURED);
     }
 
-    /**
-     * Creates MeterFilter that allows metrics matching default or user prefixes.
-     * On any error defaults to NEUTRAL to avoid blocking metrics.
-     */
+    private List<String> allCategoryNames()
+    {
+        List<String> all = new ArrayList<>(customCategories.keySet());
+        categories.stream()
+                .filter(name -> !customCategories.containsKey(name))
+                .forEach(all::add);
+        return all;
+    }
+
     @Bean
     public MeterFilter meterFilter()
     {
@@ -65,7 +100,11 @@ public class MetricsConfiguration
             {
                 try
                 {
-                    return isAllowed(id.getName()) ? MeterFilterReply.NEUTRAL : MeterFilterReply.DENY;
+                    if (unfiltered) return MeterFilterReply.NEUTRAL;
+
+                    return isAllowed(id.getName())
+                            ? MeterFilterReply.NEUTRAL
+                            : MeterFilterReply.DENY;
                 }
                 catch (Exception e)
                 {
@@ -76,15 +115,27 @@ public class MetricsConfiguration
         };
     }
 
-    /**
-     * Checks if metric name starts with any allowed prefix.
-     * Returns false for null or empty metric names.
-     */
     private boolean isAllowed(String metricName)
     {
         if (metricName == null || metricName.isBlank()) return false;
+        return effectivePrefixes.stream().anyMatch(metricName::startsWith);
+    }
 
-        return DEFAULT_ALLOWED.stream().anyMatch(metricName::startsWith)
-                || additionalPrefixes.stream().anyMatch(metricName::startsWith);
+    /**
+     * Auto-adds the "app" tag as a common tag on every metric.
+     * Value is sourced from info.app.name in application.yml.
+     */
+    @Bean
+    public MeterRegistryCustomizer<MeterRegistry> commonTagsCustomizer(
+            @Value("${info.app.name:}") String appName)
+    {
+        String resolvedApp = (appName != null && !appName.isBlank()) ? appName : UNKNOWN;
+
+        log.info(MetricsConstants.LOG_COMMON_TAGS_INIT, resolvedApp);
+
+        if (UNKNOWN.equals(resolvedApp))
+            log.warn(MetricsConstants.LOG_APP_TAG_UNKNOWN);
+
+        return registry -> registry.config().commonTags(Tags.of("app", resolvedApp));
     }
 }
