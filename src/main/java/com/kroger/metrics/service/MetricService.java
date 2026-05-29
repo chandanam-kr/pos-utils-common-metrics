@@ -6,7 +6,6 @@ import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -64,11 +63,7 @@ public class MetricService
      */
     public void trackCritical(String metricName, Throwable throwable, String... tags)
     {
-        safelyRecord(() ->
-        {
-            meterRegistry.counter(metricName + MetricsConstants.TOTAL_SUFFIX, buildExceptionTags(throwable, true, tags)).increment();
-            log.error(MetricsConstants.LOG_CRITICAL_EXCEPTION, metricName, throwable.getMessage());
-        }, metricName);
+        safelyRecord(() -> meterRegistry.counter(metricName + MetricsConstants.TOTAL_SUFFIX, buildExceptionTags(throwable, true, tags)).increment(), metricName);
     }
 
     /**

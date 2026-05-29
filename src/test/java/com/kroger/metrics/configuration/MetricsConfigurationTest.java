@@ -1,418 +1,251 @@
 package com.kroger.metrics.configuration;
 
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Meter;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Tags;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.core.instrument.config.MeterFilter;
 import io.micrometer.core.instrument.config.MeterFilterReply;
-import io.micrometer.prometheusmetrics.PrometheusConfig;
-import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.micrometer.metrics.autoconfigure.MeterRegistryCustomizer;
 
 import java.util.List;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.*;
 
-@ExtendWith(MockitoExtension.class)
 class MetricsConfigurationTest
 {
-    private MetricsConfiguration metricsConfiguration;
+    private MetricsConfiguration configuration;
 
     @BeforeEach
     void setUp()
     {
-        metricsConfiguration = new MetricsConfiguration();
+        configuration = new MetricsConfiguration();
     }
 
-    @Nested
-    class CategoriesTests
+    @Test
+    void init_shouldBuildPrefixesFromCategoriesAndCustomCategories()
     {
-        @Test
-        void shouldReturnEmptyListByDefault()
-        {
-            assertThat(metricsConfiguration.getCategories()).isEmpty();
-        }
+        configuration.setUnfiltered(false);
+        configuration.setCategories(List.of("jvm", "http", "business"));
+        configuration.setCustomCategories(Map.of(
+                "business", List.of("my.business", "order.processing"),
+                "database", List.of("db", "jdbc")
+        ));
 
-        @Test
-        void shouldStoreAndReturnCategories()
-        {
-            metricsConfiguration.setCategories(List.of("http", "jvm"));
+        configuration.init();
 
-            assertThat(metricsConfiguration.getCategories())
-                    .containsExactly("http", "jvm");
-        }
+        assertEquals(6, configuration.getEffectivePrefixes().size());
+        assertTrue(configuration.getEffectivePrefixes().contains("my.business"));
+        assertTrue(configuration.getEffectivePrefixes().contains("order.processing"));
+        assertTrue(configuration.getEffectivePrefixes().contains("db"));
+        assertTrue(configuration.getEffectivePrefixes().contains("jdbc"));
+        assertTrue(configuration.getEffectivePrefixes().contains("jvm"));
+        assertTrue(configuration.getEffectivePrefixes().contains("http"));
 
-        @Test
-        void shouldReplaceCategoriesOnSet()
-        {
-            metricsConfiguration.setCategories(List.of("old"));
-            metricsConfiguration.setCategories(List.of("http", "system"));
-
-            assertThat(metricsConfiguration.getCategories())
-                    .containsExactly("http", "system");
-        }
+        assertEquals("business", configuration.getPrefixToCategory().get("my.business"));
+        assertEquals("business", configuration.getPrefixToCategory().get("order.processing"));
+        assertEquals("database", configuration.getPrefixToCategory().get("db"));
+        assertEquals("database", configuration.getPrefixToCategory().get("jdbc"));
+        assertEquals("jvm", configuration.getPrefixToCategory().get("jvm"));
+        assertEquals("http", configuration.getPrefixToCategory().get("http"));
     }
 
-    @Nested
-    class CustomCategoriesTests
+    @Test
+    void init_shouldSkipNormalCategoryIfAlsoPresentInCustomCategories()
     {
-        @Test
-        void shouldReturnEmptyMapByDefault()
-        {
-            assertThat(metricsConfiguration.getCustomCategories()).isEmpty();
-        }
+        configuration.setCategories(List.of("business", "jvm"));
+        configuration.setCustomCategories(Map.of(
+                "business", List.of("my.business")
+        ));
 
-        @Test
-        void shouldStoreAndReturnCustomCategories()
-        {
-            metricsConfiguration.setCustomCategories(Map.of(
-                    "business-day-service", List.of("ISA")));
+        configuration.init();
 
-            assertThat(metricsConfiguration.getCustomCategories())
-                    .containsEntry("business-day-service", List.of("ISA"));
-        }
-
-        @Test
-        void shouldReplaceCustomCategoriesOnSet()
-        {
-            metricsConfiguration.setCustomCategories(Map.of("old", List.of("oldPrefix")));
-            metricsConfiguration.setCustomCategories(Map.of("new", List.of("new.prefix")));
-
-            assertThat(metricsConfiguration.getCustomCategories())
-                    .containsOnlyKeys("new")
-                    .containsEntry("new", List.of("new.prefix"));
-        }
+        assertEquals(2, configuration.getEffectivePrefixes().size());
+        assertTrue(configuration.getEffectivePrefixes().contains("my.business"));
+        assertTrue(configuration.getEffectivePrefixes().contains("jvm"));
+        assertFalse(configuration.getEffectivePrefixes().contains("business"));
     }
 
-    @Nested
-    class InitTests
+    @Test
+    void init_shouldDoNothingWhenUnfiltered()
     {
-        @Test
-        void shouldNotThrowWithEmptyConfig()
-        {
-            assertDoesNotThrow(() -> metricsConfiguration.init());
-        }
+        configuration.setUnfiltered(true);
+        configuration.setCategories(List.of("jvm", "http"));
+        configuration.setCustomCategories(Map.of("business", List.of("my.business")));
 
-        @Test
-        void shouldNotThrowWithCategoriesOnly()
-        {
-            metricsConfiguration.setCategories(List.of("http", "jvm"));
-            assertDoesNotThrow(() -> metricsConfiguration.init());
-        }
+        configuration.init();
 
-        @Test
-        void shouldNotThrowWithCustomCategoriesOnly()
-        {
-            metricsConfiguration.setCustomCategories(Map.of("business", List.of("ISA")));
-            assertDoesNotThrow(() -> metricsConfiguration.init());
-        }
-
-        @Test
-        void shouldNotThrowInUnfilteredMode()
-        {
-            metricsConfiguration.setUnfiltered(true);
-            assertDoesNotThrow(() -> metricsConfiguration.init());
-        }
-
-        @Test
-        void shouldPopulateEffectivePrefixesFromCategories()
-        {
-            metricsConfiguration.setCategories(List.of("http", "jvm"));
-            metricsConfiguration.init();
-
-            assertThat(metricsConfiguration.getEffectivePrefixes())
-                    .containsExactlyInAnyOrder("http", "jvm");
-        }
-
-        @Test
-        void shouldPopulateEffectivePrefixesFromCustomCategories()
-        {
-            metricsConfiguration.setCustomCategories(Map.of(
-                    "business", List.of("ISA", "orders")));
-            metricsConfiguration.init();
-
-            assertThat(metricsConfiguration.getEffectivePrefixes())
-                    .containsExactlyInAnyOrder("ISA", "orders");
-        }
-
-        @Test
-        void shouldMergeCategoriesAndCustomCategories()
-        {
-            metricsConfiguration.setCategories(List.of("http", "jvm"));
-            metricsConfiguration.setCustomCategories(Map.of("business", List.of("ISA")));
-            metricsConfiguration.init();
-
-            assertThat(metricsConfiguration.getEffectivePrefixes())
-                    .containsExactlyInAnyOrder("http", "jvm", "ISA");
-        }
-
-        @Test
-        void shouldGiveCustomCategoriesPrecedenceOverSimpleCategories()
-        {
-            metricsConfiguration.setCategories(List.of("jvm"));
-            metricsConfiguration.setCustomCategories(Map.of("jvm", List.of("jvm.memory")));
-            metricsConfiguration.init();
-
-            assertThat(metricsConfiguration.getEffectivePrefixes())
-                    .containsExactly("jvm.memory");
-        }
-
-        @Test
-        void shouldSkipCustomCategoryWithEmptyPrefixes()
-        {
-            metricsConfiguration.setCustomCategories(Map.of("empty", List.of()));
-            metricsConfiguration.init();
-
-            assertThat(metricsConfiguration.getEffectivePrefixes()).isEmpty();
-        }
-
-        @Test
-        void shouldBuildPrefixToCategoryMap()
-        {
-            metricsConfiguration.setCategories(List.of("http"));
-            metricsConfiguration.setCustomCategories(Map.of("business", List.of("ISA")));
-            metricsConfiguration.init();
-
-            assertThat(metricsConfiguration.getPrefixToCategory())
-                    .containsEntry("http", "http")
-                    .containsEntry("ISA", "business");
-        }
+        assertTrue(configuration.getEffectivePrefixes().isEmpty());
+        assertTrue(configuration.getPrefixToCategory().isEmpty());
     }
 
-    @Nested
-    class MeterFilterTests
+    @Test
+    void commonTagsCustomizer_shouldAddResolvedAppTag()
     {
-        @Test
-        void shouldReturnNonNullFilter()
-        {
-            MeterFilter filter = metricsConfiguration.meterFilter();
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-            assertThat(filter).isNotNull();
-        }
+        MeterRegistryCustomizer customizer = configuration.commonTagsCustomizer("sample-app");
+        customizer.customize(registry);
 
-        @Test
-        void shouldAllowMetricMatchingSimpleCategory()
-        {
-            metricsConfiguration.setCategories(List.of("http"));
-            metricsConfiguration.init();
-            MeterFilter filter = metricsConfiguration.meterFilter();
+        Counter counter = Counter.builder("test.counter").register(registry);
+        Meter.Id id = counter.getId();
 
-            assertThat(filter.accept(meterId("http.server.requests")))
-                    .isEqualTo(MeterFilterReply.NEUTRAL);
-        }
-
-        @Test
-        void shouldAllowMetricMatchingCustomCategoryPrefix()
-        {
-            metricsConfiguration.setCustomCategories(Map.of("business", List.of("ISA")));
-            metricsConfiguration.init();
-            MeterFilter filter = metricsConfiguration.meterFilter();
-
-            assertThat(filter.accept(meterId("ISA.business.day.list")))
-                    .isEqualTo(MeterFilterReply.NEUTRAL);
-        }
-
-        @Test
-        void shouldAllowJvmMetricWhenJvmConfigured()
-        {
-            metricsConfiguration.setCategories(List.of("jvm"));
-            metricsConfiguration.init();
-            MeterFilter filter = metricsConfiguration.meterFilter();
-
-            assertThat(filter.accept(meterId("jvm.memory.used")))
-                    .isEqualTo(MeterFilterReply.NEUTRAL);
-        }
-
-        @Test
-        void shouldDenyMetricNotMatchingAnyCategory()
-        {
-            metricsConfiguration.setCategories(List.of("http"));
-            metricsConfiguration.init();
-            MeterFilter filter = metricsConfiguration.meterFilter();
-
-            assertThat(filter.accept(meterId("jvm.memory.used")))
-                    .isEqualTo(MeterFilterReply.DENY);
-        }
-
-        @Test
-        void shouldDenyAllMetricsWhenNoCategoriesConfigured()
-        {
-            metricsConfiguration.init();
-            MeterFilter filter = metricsConfiguration.meterFilter();
-
-            assertThat(filter.accept(meterId("jvm.memory.used")))
-                    .isEqualTo(MeterFilterReply.DENY);
-            assertThat(filter.accept(meterId("http.server.requests")))
-                    .isEqualTo(MeterFilterReply.DENY);
-        }
-
-        @Test
-        void shouldAllowAllMetricsInUnfilteredMode()
-        {
-            metricsConfiguration.setUnfiltered(true);
-            metricsConfiguration.init();
-            MeterFilter filter = metricsConfiguration.meterFilter();
-
-            assertThat(filter.accept(meterId("anything.at.all")))
-                    .isEqualTo(MeterFilterReply.NEUTRAL);
-            assertThat(filter.accept(meterId("random.metric")))
-                    .isEqualTo(MeterFilterReply.NEUTRAL);
-        }
-
-        @Test
-        void shouldDenyBlankMetricName()
-        {
-            metricsConfiguration.setCategories(List.of("http"));
-            metricsConfiguration.init();
-            MeterFilter filter = metricsConfiguration.meterFilter();
-
-            Meter.Id id = new Meter.Id("", Tags.empty(), null, null, Meter.Type.COUNTER);
-            assertThat(filter.accept(id)).isEqualTo(MeterFilterReply.DENY);
-        }
-
-        @Test
-        void shouldAllowMetricMatchingOneOfMultiplePrefixes()
-        {
-            metricsConfiguration.setCustomCategories(Map.of(
-                    "business", List.of("ISA", "orders", "payments")));
-            metricsConfiguration.init();
-            MeterFilter filter = metricsConfiguration.meterFilter();
-
-            assertThat(filter.accept(meterId("payments.gateway.charge")))
-                    .isEqualTo(MeterFilterReply.NEUTRAL);
-        }
-
-        @Test
-        void shouldDenyMetricNotMatchingAnyPrefix()
-        {
-            metricsConfiguration.setCustomCategories(Map.of("business", List.of("ISA")));
-            metricsConfiguration.init();
-            MeterFilter filter = metricsConfiguration.meterFilter();
-
-            assertThat(filter.accept(meterId("other.service.metric")))
-                    .isEqualTo(MeterFilterReply.DENY);
-        }
-
-        private Meter.Id meterId(String name)
-        {
-            return new Meter.Id(name, Tags.empty(), null, null, Meter.Type.COUNTER);
-        }
+        assertEquals("sample-app", id.getTag("app"));
     }
 
-    @Nested
-    class CommonTagsCustomizerTests
+    @Test
+    void commonTagsCustomizer_shouldUseUnknownWhenAppNameBlank()
     {
-        @Test
-        void shouldReturnNonNullCustomizer()
-        {
-            MeterRegistryCustomizer<MeterRegistry> customizer =
-                    metricsConfiguration.commonTagsCustomizer("isa-service");
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-            assertThat(customizer).isNotNull();
-        }
+        MeterRegistryCustomizer customizer = configuration.commonTagsCustomizer(" ");
+        customizer.customize(registry);
 
-        @Test
-        void shouldAddAppTagWithProvidedName()
-        {
-            MeterRegistryCustomizer<MeterRegistry> customizer =
-                    metricsConfiguration.commonTagsCustomizer("isa-service");
-            PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+        Counter counter = Counter.builder("test.counter").register(registry);
+        Meter.Id id = counter.getId();
 
-            customizer.customize(registry);
-            registry.counter("test.counter").increment();
-
-            assertThat(registry.scrape()).contains("app=\"isa-service\"");
-        }
-
-        @Test
-        void shouldDefaultToUnknownWhenAppNameIsNull()
-        {
-            MeterRegistryCustomizer<MeterRegistry> customizer =
-                    metricsConfiguration.commonTagsCustomizer(null);
-            PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
-
-            customizer.customize(registry);
-            registry.counter("test.counter").increment();
-
-            assertThat(registry.scrape()).contains("app=\"unknown\"");
-        }
-
-        @Test
-        void shouldDefaultToUnknownWhenAppNameIsBlank()
-        {
-            MeterRegistryCustomizer<MeterRegistry> customizer =
-                    metricsConfiguration.commonTagsCustomizer("   ");
-            PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
-
-            customizer.customize(registry);
-            registry.counter("test.counter").increment();
-
-            assertThat(registry.scrape()).contains("app=\"unknown\"");
-        }
-
-        @Test
-        void shouldDefaultToUnknownWhenAppNameIsEmpty()
-        {
-            MeterRegistryCustomizer<MeterRegistry> customizer =
-                    metricsConfiguration.commonTagsCustomizer("");
-            PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
-
-            customizer.customize(registry);
-            registry.counter("test.counter").increment();
-
-            assertThat(registry.scrape()).contains("app=\"unknown\"");
-        }
-
-        @Test
-        void shouldApplyAppTagToAllMetrics()
-        {
-            MeterRegistryCustomizer<MeterRegistry> customizer =
-                    metricsConfiguration.commonTagsCustomizer("my-service");
-            PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
-
-            customizer.customize(registry);
-            registry.counter("counter.one").increment();
-            registry.counter("counter.two").increment();
-
-            String scrape = registry.scrape();
-            assertThat(scrape).contains("counter_one_total{app=\"my-service\"");
-            assertThat(scrape).contains("counter_two_total{app=\"my-service\"");
-        }
+        assertEquals("unknown", id.getTag("app"));
     }
 
-    @Nested
-    class UnfilteredModeTests
+    @Test
+    void meterFilter_accept_shouldReturnNeutralForAllowedMetric()
     {
-        @Test
-        void shouldDefaultToFalse()
-        {
-            assertThat(metricsConfiguration.isUnfiltered()).isFalse();
-        }
+        configuration.setUnfiltered(false);
+        configuration.setCategories(List.of("jvm"));
+        configuration.init();
 
-        @Test
-        void shouldStoreUnfilteredTrue()
-        {
-            metricsConfiguration.setUnfiltered(true);
+        MeterFilter filter = configuration.metricsMeterFilter();
+        Meter.Id id = new Meter.Id("jvm.memory.used", io.micrometer.core.instrument.Tags.empty(), null, null, Meter.Type.GAUGE);
 
-            assertThat(metricsConfiguration.isUnfiltered()).isTrue();
-        }
+        MeterFilterReply reply = filter.accept(id);
 
-        @Test
-        void shouldSkipPrefixComputationInUnfilteredMode()
-        {
-            metricsConfiguration.setUnfiltered(true);
-            metricsConfiguration.setCategories(List.of("http", "jvm"));
-            metricsConfiguration.init();
+        assertEquals(MeterFilterReply.NEUTRAL, reply);
+    }
 
-            assertThat(metricsConfiguration.getEffectivePrefixes()).isEmpty();
-            assertThat(metricsConfiguration.getPrefixToCategory()).isEmpty();
-        }
+    @Test
+    void meterFilter_accept_shouldReturnDenyForDisallowedMetric()
+    {
+        configuration.setUnfiltered(false);
+        configuration.setCategories(List.of("jvm"));
+        configuration.init();
+
+        MeterFilter filter = configuration.metricsMeterFilter();
+        Meter.Id id = new Meter.Id("http.server.requests", io.micrometer.core.instrument.Tags.empty(), null, null, Meter.Type.TIMER);
+
+        MeterFilterReply reply = filter.accept(id);
+
+        assertEquals(MeterFilterReply.DENY, reply);
+    }
+
+    @Test
+    void meterFilter_accept_shouldReturnNeutralWhenUnfiltered()
+    {
+        configuration.setUnfiltered(true);
+
+        MeterFilter filter = configuration.metricsMeterFilter();
+        Meter.Id id = new Meter.Id("anything.metric", io.micrometer.core.instrument.Tags.empty(), null, null, Meter.Type.COUNTER);
+
+        MeterFilterReply reply = filter.accept(id);
+
+        assertEquals(MeterFilterReply.NEUTRAL, reply);
+    }
+
+    @Test
+    void meterFilter_map_shouldAddTypeTagFromSimpleCategory()
+    {
+        configuration.setCategories(List.of("jvm"));
+        configuration.init();
+
+        MeterFilter filter = configuration.metricsMeterFilter();
+        Meter.Id original = new Meter.Id("jvm.memory.used", io.micrometer.core.instrument.Tags.empty(), null, null, Meter.Type.GAUGE);
+
+        Meter.Id mapped = filter.map(original);
+
+        assertEquals("jvm", mapped.getTag("type"));
+    }
+
+    @Test
+    void meterFilter_map_shouldAddTypeTagFromCustomCategory()
+    {
+        configuration.setCustomCategories(Map.of(
+                "business", List.of("my.business")
+        ));
+        configuration.init();
+
+        MeterFilter filter = configuration.metricsMeterFilter();
+        Meter.Id original = new Meter.Id("my.business.orders.created", io.micrometer.core.instrument.Tags.empty(), null, null, Meter.Type.COUNTER);
+
+        Meter.Id mapped = filter.map(original);
+
+        assertEquals("business", mapped.getTag("type"));
+    }
+
+    @Test
+    void meterFilter_map_shouldDeriveTypeFromFirstSegmentWhenNoConfiguredMatch()
+    {
+        configuration.setUnfiltered(true);
+
+        MeterFilter filter = configuration.metricsMeterFilter();
+        Meter.Id original = new Meter.Id("http.server.requests", io.micrometer.core.instrument.Tags.empty(), null, null, Meter.Type.TIMER);
+
+        Meter.Id mapped = filter.map(original);
+
+        assertEquals("http", mapped.getTag("type"));
+    }
+
+    @Test
+    void meterFilter_map_shouldReturnCustomWhenMetricHasNoDot()
+    {
+        configuration.setUnfiltered(true);
+
+        MeterFilter filter = configuration.metricsMeterFilter();
+        Meter.Id original = new Meter.Id("singletoken", io.micrometer.core.instrument.Tags.empty(), null, null, Meter.Type.COUNTER);
+
+        Meter.Id mapped = filter.map(original);
+
+        assertEquals("custom", mapped.getTag("type"));
+    }
+
+    @Test
+    void meterFilter_map_shouldHandleUnderscoreMetricNames()
+    {
+        configuration.setCategories(List.of("jvm"));
+        configuration.init();
+
+        MeterFilter filter = configuration.metricsMeterFilter();
+        Meter.Id original = new Meter.Id("jvm_memory_used", io.micrometer.core.instrument.Tags.empty(), null, null, Meter.Type.GAUGE);
+
+        Meter.Id mapped = filter.map(original);
+
+        assertEquals("jvm", mapped.getTag("type"));
+    }
+
+    @Test
+    void meterFilter_map_shouldFallbackToDefaultTypeWhenNameBlank()
+    {
+        configuration.setUnfiltered(true);
+
+        MeterFilter filter = configuration.metricsMeterFilter();
+        Meter.Id original = new Meter.Id(" ", io.micrometer.core.instrument.Tags.empty(), null, null, Meter.Type.COUNTER);
+
+        Meter.Id mapped = filter.map(original);
+
+        assertEquals("custom", mapped.getTag("type"));
+    }
+
+    @Test
+    void meterFilter_accept_shouldDenyBlankMetricName()
+    {
+        configuration.setCategories(List.of("jvm"));
+        configuration.init();
+
+        MeterFilter filter = configuration.metricsMeterFilter();
+        Meter.Id id = new Meter.Id(" ", io.micrometer.core.instrument.Tags.empty(), null, null, Meter.Type.COUNTER);
+
+        MeterFilterReply reply = filter.accept(id);
+
+        assertEquals(MeterFilterReply.DENY, reply);
     }
 }

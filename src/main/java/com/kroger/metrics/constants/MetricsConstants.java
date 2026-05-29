@@ -16,10 +16,8 @@ public final class MetricsConstants
     public static final String LOG_CATEGORY_NO_PREFIXES      = "Category '{}' has no prefixes defined. It will be ignored.";
     public static final String LOG_NO_PREFIXES_CONFIGURED    = "No metric prefixes configured. All metrics will be denied!";
     public static final String LOG_METER_FILTER_ERROR        = "MeterFilter error for [{}]: {}";
-    public static final String LOG_METRICS_CONTROLLER_ERROR  = "Failed to generate metrics: {}";
     public static final String LOG_COMMON_TAGS_INIT          = "Metrics common tags initialized — app: {}";
     public static final String LOG_APP_TAG_UNKNOWN           = "Could not resolve 'app' tag. Set 'spring.application.name' or 'metrics.app' in application.yml. Defaulting to 'unknown'.";
-    public static final String ERROR_GENERATING_METRICS_BODY = "# Error generating metrics\n";
     public static final String METRIC_RECORDING_FAILED_LOG   = "Metric recording failed for [{}]: {}";
     public static final String LOG_CRITICAL_EXCEPTION        = "CRITICAL [{}]: {}";
     public static final String LOG_EXCEPTION                 = "Exception [{}]: {}";

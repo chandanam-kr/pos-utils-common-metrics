@@ -21,9 +21,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Metric filtering + global tag injection driven by application.yml.
- */
 @Slf4j
 @Getter
 @Setter
@@ -32,19 +29,28 @@ import java.util.Map;
 public class MetricsConfiguration
 {
     private static final String UNKNOWN = "unknown";
+    private static final String DEFAULT_TYPE = "custom";
 
-    //When true, all metrics pass through with no filtering.
+    /**
+     * When true, all metrics pass through with no filtering.
+     */
     private boolean unfiltered = false;
 
-    //Simple categories — name acts as both prefix and type tag value.
+    /**
+     * Simple categories — category name acts as both prefix and type tag value.
+     */
     private List<String> categories = new ArrayList<>();
 
-    //Categories with explicit prefix overrides.
+    /**
+     * Categories with explicit prefix overrides.
+     */
     private Map<String, List<String>> customCategories = new LinkedHashMap<>();
 
-    // Computed at startup
-    private List<String> effectivePrefixes        = new ArrayList<>();
-    private Map<String, String> prefixToCategory  = new LinkedHashMap<>();
+    /**
+     * Computed at startup.
+     */
+    private List<String> effectivePrefixes = new ArrayList<>();
+    private Map<String, String> prefixToCategory = new LinkedHashMap<>();
 
     @PostConstruct
     public void init()
@@ -55,43 +61,66 @@ public class MetricsConfiguration
             return;
         }
 
-        customCategories.forEach((name, prefixes) -> {
+        customCategories.forEach((categoryName, prefixes) -> {
             if (prefixes == null || prefixes.isEmpty())
             {
-                log.debug(MetricsConstants.LOG_CATEGORY_NO_PREFIXES, name);
+                log.debug(MetricsConstants.LOG_CATEGORY_NO_PREFIXES, categoryName);
                 return;
             }
-            prefixes.forEach(p -> {
-                effectivePrefixes.add(p);
-                prefixToCategory.put(p, name);
+
+            prefixes.forEach(prefix -> {
+                effectivePrefixes.add(prefix);
+                prefixToCategory.put(prefix, categoryName);
             });
         });
 
         categories.stream()
-                .filter(name -> !customCategories.containsKey(name))
-                .forEach(name -> {
-                    effectivePrefixes.add(name);
-                    prefixToCategory.put(name, name);
+                .filter(category -> !customCategories.containsKey(category))
+                .forEach(category -> {
+                    effectivePrefixes.add(category);
+                    prefixToCategory.put(category, category);
                 });
 
-        log.info(MetricsConstants.LOG_METRICS_FILTER_INIT,
-                allCategoryNames(), effectivePrefixes, customCategories.keySet());
+        log.info(
+                MetricsConstants.LOG_METRICS_FILTER_INIT,
+                allCategoryNames(),
+                effectivePrefixes,
+                customCategories.keySet()
+        );
 
         if (effectivePrefixes.isEmpty())
+        {
             log.debug(MetricsConstants.LOG_NO_PREFIXES_CONFIGURED);
+        }
     }
 
     private List<String> allCategoryNames()
     {
         List<String> all = new ArrayList<>(customCategories.keySet());
         categories.stream()
-                .filter(name -> !customCategories.containsKey(name))
+                .filter(category -> !customCategories.containsKey(category))
                 .forEach(all::add);
         return all;
     }
 
     @Bean
-    public MeterFilter meterFilter()
+    public MeterRegistryCustomizer<MeterRegistry> commonTagsCustomizer(
+            @Value("${info.app.name:}") String appName)
+    {
+        String resolvedApp = (appName != null && !appName.isBlank()) ? appName : UNKNOWN;
+
+        log.info(MetricsConstants.LOG_COMMON_TAGS_INIT, resolvedApp);
+
+        if (UNKNOWN.equals(resolvedApp))
+        {
+            log.warn(MetricsConstants.LOG_APP_TAG_UNKNOWN);
+        }
+
+        return registry -> registry.config().commonTags(Tags.of("app", resolvedApp));
+    }
+
+    @Bean
+    public MeterFilter metricsMeterFilter()
     {
         return new MeterFilter()
         {
@@ -100,7 +129,10 @@ public class MetricsConfiguration
             {
                 try
                 {
-                    if (unfiltered) return MeterFilterReply.NEUTRAL;
+                    if (unfiltered)
+                    {
+                        return MeterFilterReply.NEUTRAL;
+                    }
 
                     return isAllowed(id.getName())
                             ? MeterFilterReply.NEUTRAL
@@ -112,30 +144,54 @@ public class MetricsConfiguration
                     return MeterFilterReply.NEUTRAL;
                 }
             }
+
+            @Override
+            public Meter.Id map(Meter.Id id)
+            {
+                try
+                {
+                    String type = resolveType(id.getName());
+                    return id.withTags(Tags.of("type", type));
+                }
+                catch (Exception e)
+                {
+                    log.warn("Failed to resolve metric type for {}", id.getName(), e);
+                    return id.withTags(Tags.of("type", DEFAULT_TYPE));
+                }
+            }
         };
     }
 
     private boolean isAllowed(String metricName)
     {
-        if (metricName == null || metricName.isBlank()) return false;
-        return effectivePrefixes.stream().anyMatch(metricName::startsWith);
+        if (metricName == null || metricName.isBlank())
+        {
+            return false;
+        }
+
+        String dottedName = metricName.replace('_', '.');
+        return effectivePrefixes.stream().anyMatch(dottedName::startsWith);
     }
 
-    /**
-     * Auto-adds the "app" tag as a common tag on every metric.
-     * Value is sourced from info.app.name in application.yml.
-     */
-    @Bean
-    public MeterRegistryCustomizer<MeterRegistry> commonTagsCustomizer(
-            @Value("${info.app.name:}") String appName)
+    private String resolveType(String metricName)
     {
-        String resolvedApp = (appName != null && !appName.isBlank()) ? appName : UNKNOWN;
+        if (metricName == null || metricName.isBlank())
+        {
+            return DEFAULT_TYPE;
+        }
 
-        log.info(MetricsConstants.LOG_COMMON_TAGS_INIT, resolvedApp);
+        String dotted = metricName.replace('_', '.');
 
-        if (UNKNOWN.equals(resolvedApp))
-            log.warn(MetricsConstants.LOG_APP_TAG_UNKNOWN);
+        return prefixToCategory.entrySet().stream()
+                .filter(entry -> dotted.startsWith(entry.getKey()))
+                .map(Map.Entry::getValue)
+                .findFirst()
+                .orElseGet(() -> deriveTypeFromFirstSegment(dotted));
+    }
 
-        return registry -> registry.config().commonTags(Tags.of("app", resolvedApp));
+    private String deriveTypeFromFirstSegment(String dotted)
+    {
+        int firstDot = dotted.indexOf('.');
+        return firstDot > 0 ? dotted.substring(0, firstDot) : DEFAULT_TYPE;
     }
 }

@@ -2,7 +2,6 @@ package com.kroger.metrics.configuration;
 
 import com.kroger.metrics.aspect.MetricAspect;
 import com.kroger.metrics.aspect.OnExceptionAspect;
-import com.kroger.metrics.controller.MetricsController;
 import com.kroger.metrics.service.MetricService;
 import com.kroger.metrics.service.NoOpMetricService;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -33,15 +32,6 @@ public class MetricsAutoConfiguration
                                                MetricAspect metricAspect)
     {
         return new OnExceptionAspect(meterRegistry, metricAspect);
-    }
-
-    @Bean
-    @ConditionalOnProperty(name = "metrics.enabled", havingValue = "true", matchIfMissing = true)
-    @ConditionalOnMissingBean(MetricsController.class)
-    public MetricsController metricsController(PrometheusMeterRegistry registry,
-                                               MetricsConfiguration metricsConfig)
-    {
-        return new MetricsController(registry, metricsConfig);
     }
 
     @Bean
