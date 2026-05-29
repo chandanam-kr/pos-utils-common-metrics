@@ -87,7 +87,6 @@ public class OnExceptionAspect
     {
         List<Tag> tags = buildFailureTags(baseTags, throwable, track.critical());
         meterRegistry.counter(track.metric() + TOTAL_SUFFIX, tags).increment();
-        logException(track.metric(), throwable, track.critical());
     }
 
     private void recordDefault(OnException onException, List<Tag> baseTags, Throwable throwable)
@@ -98,15 +97,6 @@ public class OnExceptionAspect
         List<Tag> tags    = buildFailureTags(baseTags, throwable, false);
 
         meterRegistry.counter(metricName + TOTAL_SUFFIX, tags).increment();
-        logException(metricName, throwable, false);
-    }
-
-    private void logException(String metricName, Throwable throwable, boolean critical)
-    {
-        if (critical)
-            log.error(LOG_CRITICAL_EXCEPTION, metricName, throwable.getMessage());
-        else
-            log.warn(LOG_EXCEPTION, metricName, throwable.getMessage());
     }
 
     private List<Tag> buildBaseTags(ProceedingJoinPoint joinPoint, OnException onException)
