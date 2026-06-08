@@ -2,7 +2,7 @@ name: Build and Release
 # Artifacts will be released from main branch.
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main" , "custom-metrics"]
   workflow_dispatch:
 
 env:
