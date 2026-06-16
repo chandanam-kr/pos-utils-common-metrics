@@ -25,7 +25,7 @@ A lightweight, annotation-driven metrics library for NGPOS services that simplif
 
 ## Overview
 
-`pos-utils-metrics` provides a clean, declarative way to add Prometheus metrics to your Spring Boot applications. It abstracts away the boilerplate of Micrometer and Prometheus configuration, letting developers focus on business logic.
+`pos-utils-common-metrics` provides a clean, declarative way to add Prometheus metrics to your Spring Boot applications. It abstracts away the boilerplate of Micrometer and Prometheus configuration, letting developers focus on business logic.
 
 **Why use this library?**
 
@@ -67,7 +67,7 @@ Add the dependency to your `pom.xml`:
 <dependency>
     <groupId>com.kroger.ngpos.utils</groupId>
     <artifactId>pos-utils-common-metrics</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.0</version> //update version
 </dependency>
 ```
 The library auto-configures itself on startup. No @Import or @EnableMetrics needed.
