@@ -2,7 +2,6 @@ package com.kroger.metrics.configuration;
 
 import com.kroger.metrics.constants.MetricsConstants;
 import io.micrometer.core.instrument.Meter;
-import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.config.MeterFilter;
 import io.micrometer.core.instrument.config.MeterFilterReply;
@@ -10,9 +9,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.boot.micrometer.metrics.autoconfigure.MeterRegistryCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -28,7 +25,6 @@ import java.util.Map;
 @ConfigurationProperties(prefix = "metrics")
 public class MetricsConfiguration
 {
-    private static final String UNKNOWN = "unknown";
     private static final String DEFAULT_TYPE = "custom";
 
     /**
@@ -101,22 +97,6 @@ public class MetricsConfiguration
                 .filter(category -> !customCategories.containsKey(category))
                 .forEach(all::add);
         return all;
-    }
-
-    @Bean
-    public MeterRegistryCustomizer<MeterRegistry> commonTagsCustomizer(
-            @Value("${info.app.name:}") String appName)
-    {
-        String resolvedApp = (appName != null && !appName.isBlank()) ? appName : UNKNOWN;
-
-        log.info(MetricsConstants.LOG_COMMON_TAGS_INIT, resolvedApp);
-
-        if (UNKNOWN.equals(resolvedApp))
-        {
-            log.warn(MetricsConstants.LOG_APP_TAG_UNKNOWN);
-        }
-
-        return registry -> registry.config().commonTags(Tags.of("app", resolvedApp));
     }
 
     @Bean

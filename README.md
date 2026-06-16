@@ -78,9 +78,6 @@ The library auto-configures itself on startup. No @Import or @EnableMetrics need
 Configure in your application.yml:
 
 ```yaml
-info:
-  app:
-    name: my-service          # used as "app" tag value
 
 management:
   endpoints:

@@ -1,13 +1,10 @@
 package com.kroger.metrics.configuration;
 
-import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Meter;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.core.instrument.config.MeterFilter;
 import io.micrometer.core.instrument.config.MeterFilterReply;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.micrometer.metrics.autoconfigure.MeterRegistryCustomizer;
 
 import java.util.List;
 import java.util.Map;
@@ -79,34 +76,6 @@ class MetricsConfigurationTest
 
         assertTrue(configuration.getEffectivePrefixes().isEmpty());
         assertTrue(configuration.getPrefixToCategory().isEmpty());
-    }
-
-    @Test
-    void commonTagsCustomizer_shouldAddResolvedAppTag()
-    {
-        SimpleMeterRegistry registry = new SimpleMeterRegistry();
-
-        MeterRegistryCustomizer customizer = configuration.commonTagsCustomizer("sample-app");
-        customizer.customize(registry);
-
-        Counter counter = Counter.builder("test.counter").register(registry);
-        Meter.Id id = counter.getId();
-
-        assertEquals("sample-app", id.getTag("app"));
-    }
-
-    @Test
-    void commonTagsCustomizer_shouldUseUnknownWhenAppNameBlank()
-    {
-        SimpleMeterRegistry registry = new SimpleMeterRegistry();
-
-        MeterRegistryCustomizer customizer = configuration.commonTagsCustomizer(" ");
-        customizer.customize(registry);
-
-        Counter counter = Counter.builder("test.counter").register(registry);
-        Meter.Id id = counter.getId();
-
-        assertEquals("unknown", id.getTag("app"));
     }
 
     @Test
